@@ -1,0 +1,38 @@
+\section{程序结构与运行}\label{app:code}
+全部代码位于 \texttt{code} 目录，依赖 Python 3.11、\texttt{gurobipy}、NumPy、pandas、SciPy 与 Matplotlib。线性规划均为连续模型，最大规模的扩展实验含 600 个变量，处于 Gurobi 受限许可证的规模范围之内。
+\begin{itemize}
+\item \texttt{recommendation.py}：实例定义 \texttt{Instance}、可复用的流体线性规划 \texttt{FluidLP}、四种在线策略（\texttt{FixedTopK} 即算法 1、\texttt{Greedy}、\texttt{LPLookahead}、\texttt{LPDual}）、公共随机数模拟器 \texttt{simulate}、动态规划 \texttt{dp\_benchmark}，以及精确评价所需的 \texttt{exact\_forward} 与 \texttt{LPTables}。
+\item \texttt{run\_policy.py}：对任意到达序列 CSV（列 \texttt{t}, \texttt{i\_t}）运行指定策略，输出逐期推荐、购买、库存轨迹，以及总收入、剩余库存、hindsight 与遗憾；可通过 JSON 文件指定任意 $m,n,T,K$ 的实例。
+\item \texttt{experiments.py}：第\ref{sec:q1}节、第\ref{sec:q2}节与第\ref{sec:exp}节的全部实验，随机种子固定。
+\item \texttt{make\_assets.py}：读取 \texttt{results} 目录中的结果，生成论文的表格、图形与数值宏。
+\item \texttt{tests.py}：自动化测试。
+\end{itemize}
+常用命令如下（在 \texttt{code} 目录下运行）：
+\begin{verbatim}
+python run_policy.py "../online recommendation/data/arrivals_dataset_1.csv"
+python run_policy.py my_arrivals.csv --reps 1000
+python run_policy.py my_arrivals.csv --policy LP-FD --instance instance.json
+python tests.py
+python experiments.py all
+python make_assets.py
+\end{verbatim}
+在线服务中，平台创建一次策略对象，每期调用 \texttt{recommend(i, c, H)} 得到推荐集合，其中 \texttt{i} 为顾客类型（从 0 开始编号），\texttt{c} 为当前库存，\texttt{H} 为含本期在内的剩余期数；观察到购买结果后由平台更新库存。
+
+\section{自动化测试}\label{app:tests}
+\texttt{tests.py} 共 14 项测试，覆盖模型、策略与评价方法三个层面：
+\begin{enumerate}[label=(\arabic*)]
+\item 课程实例的流体线性规划最优值为 706，期望销量为 $(40,29,37/3)$，库存对偶为 $(9,0,0)$，对偶目标\eqref{eq:dual}等于原始目标；
+\item 以商品为变量的模型\eqref{eq:lp}与以推荐集合为变量的模型最优值相同；
+\item 动态规划\eqref{eq:seqdp}与独立编写的递归枚举结果一致；
+\item 前向精确评价\eqref{eq:forward}与后向递推对 \Greedy{}、\IIDDP{}、\SeqDP{} 给出相同的期望收入；
+\item 动作表版本的 \LPFD{}、\LPDual{} 与在线策略对象逐状态枚举的期望收入一致；
+\item 剩余人数预测版本的动作表与在线模拟结果一致；
+\item 向量化排序规则与逐个排序在 3000 组随机输入上完全一致；
+\item 随机生成的不同 $(m,n,T,K)$ 实例上，策略不推荐缺货商品、收入恒等式\eqref{eq:revenue}成立，并且改变未来到达不影响此前的决策；
+\item 算法 1 的缺货推荐次数的模拟均值与精确值一致；
+\item 潜在首选的抽样频率与 $p_{ij}$ 一致；
+\item 机会成本等于价格时，策略仍把即时收益为正的商品放进推荐列表；
+\item $K\ge n$ 时，策略在每条路径上达到命题\ref{prop:kn}给出的最优销量；
+\item 非法输入（概率行和大于 1、非整数库存、到达率之和不为 1）被拒绝；
+\item 算例\ref{ex:q1}的闭式收入与精确评价结果一致。
+\end{enumerate}

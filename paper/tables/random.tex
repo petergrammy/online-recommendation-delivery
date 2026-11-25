@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering\small
+\caption{生成序列上的精确期望遗憾与策略损失}\label{tab:random}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+ & \multicolumn{4}{c}{随机排列（500 条）} & \multicolumn{4}{c}{独立同分布到达（500 条）} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+策略 & $\overline G$ & $G_{0.95}$ & $G_{\max}$ & $\overline L$ & $\overline G$ & $G_{0.95}$ & $G_{\max}$ & $\overline L$ \\
+\midrule
+\AlgOne{} & 12.606 & 12.606 & 12.606 & 2.901 & 12.522 & 17.983 & 21.979 & 3.260 \\
+\Greedy{} & 10.226 & 10.895 & 11.757 & 0.520 & 9.906 & 16.423 & 18.861 & 0.644 \\
+\LPFD{} & 10.200 & 11.099 & 12.927 & 0.495 & 9.711 & 16.331 & 19.674 & 0.449 \\
+\LPDual{} & 9.902 & 10.551 & 11.426 & 0.197 & 9.513 & 16.148 & 18.451 & 0.251 \\
+\IIDDP{} & 9.801 & 10.421 & 11.044 & 0.096 & 9.370 & 15.987 & 18.207 & 0.108 \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.35em}{\footnotesize $G_{0.95}$ 为 500 条序列上期望遗憾的 95\% 分位数。两组序列的 $F_s$ 与 $V^{\seq}_s$ 逐条计算。}
+\end{table}

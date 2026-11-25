@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering\small
+\caption{课程实例上三种离线模型的规模、最优值与期望销量}\label{tab:offline}
+\begin{tabular}{lrrrl}
+\toprule
+模型 & 变量数 & 约束数 & 最优值 & 期望销量 \\
+\midrule
+(a) 类型级 0-1 模型 & 9 & 6 & 604.0 & $(30.00,\ 29.00,\ 12.00)$ \\
+(b) 顾客级 0-1 模型 & 300 & 103 & 705.2 & $(40.00,\ 29.00,\ 12.20)$ \\
+(c) 流体线性规划\eqref{eq:lp} & 9 & 6 & 706.0 & $(40.00,\ 29.00,\ 12.33)$ \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.35em}{\footnotesize 顾客级模型在五份数据上的最优值与期望销量都相同，变量数与约束数按 $T=100$ 计算；流体线性规划的约束数不含变量上界。}
+\end{table}

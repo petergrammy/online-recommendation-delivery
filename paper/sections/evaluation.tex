@@ -1,0 +1,50 @@
+\section{评价方法}\label{sec:eval}
+本节给出三类工具：两种动态规划基准、无蒙特卡洛误差的精确策略评价，以及蒙特卡洛模拟的统计量。后两者分别用于计算期望遗憾和刻画单次实现的波动。
+
+\subsection{两种动态规划基准}
+\textbf{序列已知的动态规划（\SeqDP）。} 固定到达序列 $i_{1:T}$，以 $V_t(c)$ 表示第 $t$ 期开始、库存为 $c$ 时的最优期望收入，$V_{T+1}(c)=0$，Bellman 方程为
+\begin{equation}
+V_t(c)=V_{t+1}(c)+\max_{\substack{S\subseteq A(c)\\|S|\le K}}\ \sum_{j\in S}p_{i_tj}\bigl[r_j+V_{t+1}(c-e_j)-V_{t+1}(c)\bigr].
+\label{eq:seqdp}
+\end{equation}
+记 $V^{\seq}=V_1(C)$。\SeqDP{} 预先知道全部顾客类型，购买结果仍然随机，它给出了任何在线策略在该序列上所能达到的期望收入上限，满足 $\E[R_T(\pi)\mid i_{1:T}]\le V^{\seq}\le F(N,C)$。\SeqDP{} 使用了未来信息，只作为诊断基准。
+
+\textbf{独立同分布到达下的动态规划（\IIDDP）。} 若后续顾客类型按 $\lambda$ 独立到达，以 $W_h(c)$ 表示剩余 $h$ 期、尚未观察下一位顾客时的最优价值，$W_0(c)=0$，
+\begin{equation}
+W_h(c)=\sum_{i=1}^{m}\lambda_i\Bigl[W_{h-1}(c)+\max_{\substack{S\subseteq A(c)\\|S|\le K}}\ \sum_{j\in S}p_{ij}\bigl[r_j+W_{h-1}(c-e_j)-W_{h-1}(c)\bigr]\Bigr].
+\label{eq:iiddp}
+\end{equation}
+把每个 $(h,i,c)$ 上的最优动作存成表格，就得到一个在线策略 \IIDDP{}：它只使用 $\lambda$ 与当前状态，在独立同分布到达下是最优在线策略。课程实例的库存状态共 $41\times36\times26=38{,}376$ 个，100 期、3 类顾客的动作表含约 1150 万项，向量化递推用时约 \IIDSeconds{} 秒。状态数随商品数按 $\prod_j(C_j+1)$ 指数增长，动态规划因而只适合作为小规模实例上的基准；线性规划策略的规模为 $mn$，可以扩展到更大的问题。
+
+\subsection{精确策略评价}\label{sec:exact}
+本文比较的策略都在第 $t$ 期依据 $(t,i_t,c_t)$ 选择推荐集合，记为 $S_t(c)$。给定到达序列后，库存过程是格点 $\mathcal L=\prod_j\{0,1,\ldots,C_j\}$ 上的非齐次马尔可夫链。令 $D_t(c)=\Pr(c_t=c)$，$D_1$ 集中在 $C$ 上，则
+\begin{equation}
+D_{t+1}(c)=D_t(c)\Bigl(1-\sum_{j\in S_t(c)\cap A(c)}p_{i_tj}\Bigr)+\sum_{j=1}^{n}D_t(c+e_j)\,p_{i_tj}\,\ind\bigl\{j\in S_t(c+e_j)\bigr\}.
+\label{eq:forward}
+\end{equation}
+式中 $S_t(c)\cap A(c)$ 剔除了缺货商品，可以同时处理会推荐缺货商品的算法 1。收入由期末库存唯一决定：
+\begin{equation}
+R_T=\sum_{j=1}^{n}r_j\bigl(C_j-c_{T+1,j}\bigr),
+\label{eq:revenue}
+\end{equation}
+因此 $D_{T+1}$ 直接给出 $R_T$ 的精确分布，进而得到期望收入、标准差、$\Pr(R_T>F)$、期望剩余库存 $\E c_{T+1,j}$ 与售罄概率 $q_j=\Pr(c_{T+1,j}=0)$。每一步递推的计算量为 $O(n|\mathcal L|)$，课程实例上一条序列的全部递推约需 \ExactSeconds{} 秒。
+
+两种 LP 策略的动作依赖 $F(\tau\lambda,c)$ 在整个格点上的取值。由于每期至多售出一件，库存超过剩余期数 $\tau$ 的部分不会形成约束，求解时可以把 $c_j$ 截断为 $\min\{c_j,\tau\}$。本文对 $\tau=0,\ldots,99$ 与全部截断状态共求解约 283 万个线性规划（14 个进程并行，用时 \TableSeconds{} 秒），然后生成每个 $(h,i,c)$ 的动作表。在五份数据各 300 条模拟路径上，两种策略共 \VerifyDecisions{} 次决策中，动作表与在线策略对象给出的推荐集合不一致的次数为 \VerifyMismatch{}；单元测试还在缩小的实例上把式\eqref{eq:forward}的结果与逐状态枚举、后向递推进行了对照。
+
+\subsection{遗憾分解}
+对固定序列 $s$，期望遗憾可以分解为
+\begin{equation}
+G_s(\pi)=F_s-\E[R_T(\pi)\mid s]=\underbrace{F_s-V_s^{\seq}}_{\text{流体松弛间隙}}+\underbrace{V_s^{\seq}-\E[R_T(\pi)\mid s]}_{\text{策略损失}}.
+\label{eq:gap}
+\end{equation}
+记 $L_s(\pi)=V_s^{\seq}-\E[R_T(\pi)\mid s]\ge0$ 为策略损失。流体松弛间隙与策略无关：流体模型用期望销量代替随机销量，库存约束只在期望意义下成立；随机需求低于库存时余量无法转移给其他时段，高于库存时多余需求流失，由 Jensen 不等式 $\E\min\{D,C\}\le\min\{\E D,C\}$，随机系统的可达收入低于流体值。策略损失衡量在线策略与预知顾客类型的最优策略之间的差距，其中包含不知道未来到达顺序的代价。任何在线策略都无法消除流体松弛间隙，比较策略时应关注 $L_s(\pi)$。
+
+\subsection{蒙特卡洛统计量}\label{sec:mc}
+对序列 $s$ 的第 $b$ 次重复，各策略共享同一组潜在首选 $J_{1:T}^{(s,b)}$。记策略 $\pi$ 的收入为 $R^{\pi}_{sb}$，$b=1,\ldots,B$，定义
+\begin{equation}
+\overline R_s^{\pi}=\frac1B\sum_{b=1}^{B}R^{\pi}_{sb},\qquad
+h_s^{\pi}=t_{0.975,B-1}\frac{\hat\sigma_s^{\pi}}{\sqrt B},\qquad
+\bar d_s^{\,\pi\pi'}=\frac1B\sum_{b=1}^{B}\bigl(R^{\pi}_{sb}-R^{\pi'}_{sb}\bigr),
+\label{eq:mcstats}
+\end{equation}
+其中 $\hat\sigma_s^{\pi}$ 为样本标准差，$h_s^{\pi}$ 是 95\% 置信区间的半宽；配对差 $\bar d_s^{\,\pi\pi'}$ 的半宽 $h_s^{\,\pi\pi'}$ 按同一公式由逐次差值的样本标准差计算。主实验取 $B=2000$，随机种子为 20261107，五份数据使用独立的随机流。

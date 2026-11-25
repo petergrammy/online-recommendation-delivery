@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering\small
+\caption{各策略在五份数据上的综合表现}\label{tab:aggregate}
+\begin{tabular}{lrrrrrr}
+\toprule
+策略 & $\overline{\E R_T}$ & $\overline G$ & $G_{\max}$ & $\overline G^{\,\mathrm{MC}}$ & $\overline L$ & $\overline W$ \\
+\midrule
+\AlgOne{} & 693.394 & 12.606 & 12.606 & 12.426 & 2.669 & 6.29 \\
+\Greedy{} & 695.550 & 10.450 & 11.168 & 10.318 & 0.513 & 0.00 \\
+\LPFD{} & 695.490 & 10.510 & 11.058 & 10.306 & 0.572 & 0.00 \\
+\LPDual{} & 695.894 & 10.106 & 10.740 & 9.939 & 0.169 & 0.00 \\
+\LPCount{} & 695.768 & 10.232 & 11.147 & 10.121 & 0.295 & 0.00 \\
+\IIDDP{} & 695.862 & 10.138 & 10.815 & 9.995 & 0.201 & 0.00 \\
+\SeqDP{} & 696.062 & 9.938 & 10.525 & -- & 0.000 & -- \\
+\bottomrule
+\end{tabular}
+\par\vspace{0.35em}{\footnotesize $\overline G$ 与 $G_{\max}$ 按式\eqref{eq:avgmax}由精确期望计算；$\overline G^{\,\mathrm{MC}}=\frac15\sum_s(F_s-\overline R_s)$ 为模拟估计；$\overline L$ 为五份数据上策略损失 $L_s$ 的平均；$\overline W$ 为每条路径上缺货推荐的期望次数，定义见式\eqref{eq:waste}。\LPCount{} 使用了总人数 $N$；\SeqDP{} 预知顾客类型序列，只作为基准。}
+\end{table}

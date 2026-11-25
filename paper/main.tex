@@ -1,0 +1,83 @@
+\documentclass[UTF8,a4paper,11pt]{ctexart}
+\usepackage[margin=2.2cm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm,mathtools}
+\usepackage{booktabs,tabularx,array,multirow,makecell}
+\usepackage{graphicx,xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage[section]{placeins}
+\usepackage{algorithm,algpseudocode}
+\usepackage{float,caption,subcaption,fancyhdr,microtype,enumitem}
+\usepackage[colorlinks=true,linkcolor=teal,citecolor=teal,urlcolor=teal]{hyperref}
+
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.25em}
+\setlength{\emergencystretch}{2em}
+\linespread{1.2}
+\renewcommand{\arraystretch}{1.15}
+\captionsetup{font=small,labelsep=quad}
+\setlist{itemsep=0.15em,topsep=0.3em}
+
+% pseudo-code keeps the English keywords (for, if, return, ...)
+\floatname{algorithm}{算法}
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+\algrenewcommand{\algorithmiccomment}[1]{\hfill$\triangleright$ #1}
+
+\newcommand{\E}{\mathbb E}
+\newcommand{\ind}{\mathbf 1}
+\newcommand{\seq}{\mathrm{seq}}
+\newcommand{\Pol}[1]{\textsf{#1}}
+\newcommand{\AlgOne}{\Pol{Alg1}}
+\newcommand{\Greedy}{\Pol{Greedy}}
+\newcommand{\LPFD}{\Pol{LP-FD}}
+\newcommand{\LPDual}{\Pol{LP-Dual}}
+\newcommand{\LPCount}{\Pol{LP-Count}}
+\newcommand{\IIDDP}{\Pol{IID-DP}}
+\newcommand{\SeqDP}{\Pol{Seq-DP}}
+
+\theoremstyle{definition}   % upright body text suits Chinese
+\newtheorem{proposition}{命题}
+\newtheorem{definition}{定义}
+\newtheorem{example}{算例}
+\renewcommand{\proofname}{证明}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small 库存约束下的在线 Top-$K$ 推荐}
+\fancyhead[R]{\small 线性规划机会成本与滚动前瞻}
+\fancyfoot[C]{\thepage}
+
+\input{generated/numbers}
+
+\title{\bfseries 库存约束下的在线 Top-$K$ 推荐\\[0.4em]
+\large 基于线性规划库存机会成本的滚动前瞻策略}
+\author{组员：\underline{\hspace{9cm}}}
+\date{2026年11月}
+
+\begin{document}
+\maketitle
+\input{sections/abstract}
+\input{sections/intro}
+\input{sections/setting}
+\input{sections/q1}
+\input{sections/q2}
+\input{sections/policy}
+\input{sections/evaluation}
+\input{sections/experiments}
+\input{sections/conclusion}
+
+\begin{thebibliography}{99}
+\bibitem{assignment} Online Top-K Recommendation. 课程项目题目, 2026.
+\bibitem{gallego} Gallego G, van Ryzin G. A multiproduct dynamic pricing problem and its applications to network yield management. \textit{Operations Research}, 1997, 45(1): 24--41.
+\bibitem{talluri98} Talluri K, van Ryzin G. An analysis of bid-price controls for network revenue management. \textit{Management Science}, 1998, 44(11): 1577--1593.
+\bibitem{talluribook} Talluri K, van Ryzin G. \textit{The Theory and Practice of Revenue Management}. New York: Springer, 2004.
+\bibitem{jasin} Jasin S, Kumar S. A re-solving heuristic with bounded revenue loss for network revenue management with customer choice. \textit{Mathematics of Operations Research}, 2012, 37(2): 313--345.
+\bibitem{golrezaei} Golrezaei N, Nazerzadeh H, Rusmevichientong P. Real-time optimization of personalized assortments. \textit{Management Science}, 2014, 60(6): 1532--1551.
+\bibitem{bumpensanti} Bumpensanti P, Wang H. A re-solving heuristic with uniformly bounded loss for network revenue management. \textit{Management Science}, 2020, 66(7): 2993--3009.
+\bibitem{gurobi} Gurobi Optimization. \textit{Gurobi Optimizer Reference Manual}, Version 13.0. 2026.
+\end{thebibliography}
+
+\appendix
+\input{sections/appendix}
+\end{document}

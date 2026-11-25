@@ -1,0 +1,15 @@
+{
+  "reps_per_dataset": 300,
+  "policies": {
+    "LP-FD": {
+      "decisions": 150000,
+      "mismatches": 0
+    },
+    "LP-Dual": {
+      "decisions": 150000,
+      "mismatches": 0
+    }
+  },
+  "exact_forward_seconds": 0.16044602000620217,
+  "iid_dp_seconds": 0.47518080001464114
+}

@@ -1,0 +1,123 @@
+\section{问题描述与模型}\label{sec:setting}
+
+\subsection{业务场景与决策流程}
+考虑一家生鲜平台在一小时营业窗口内的推荐决策。窗口被划分为 $T$ 个时段（题目实例中 $T=100$），每个时段恰有一位顾客进入 App。平台销售 $n$ 种商品，商品 $j$ 的单价为 $r_j$，营业开始时的库存为 $C_j$，窗口内无法补货。平台依据历史浏览与购买数据把顾客划分为 $m$ 种类型，任一时段到达的顾客属于类型 $i$ 的概率为 $\lambda_i$，$\sum_{i}\lambda_i=1$，因而一个窗口内类型 $i$ 的期望人数为 $T\lambda_i$。
+
+图\ref{fig:flow}给出单个时段内的决策流程。第 $t$ 期顾客到达后，平台依次完成四个动作：
+\begin{enumerate}[label=(\arabic*)]
+\item 识别顾客类型 $i_t$，读取当前库存向量 $c_t=(c_{t1},\ldots,c_{tn})$ 与含本期在内的剩余期数 $T-t+1$；
+\item 从有货商品中选出至多 $K$ 件组成推荐集合 $S_t$，展示给顾客；
+\item 顾客浏览推荐列表，至多购买一件商品；
+\item 若顾客购买商品 $j$，平台获得收入 $r_j$，库存更新为 $c_{t+1}=c_t-e_j$（$e_j$ 为第 $j$ 个单位向量）；若顾客未购买，库存保持不变。
+\end{enumerate}
+窗口结束时剩余商品不产生残值，平台的目标是最大化 $T$ 期的期望总收入 $R_T=\sum_{t=1}^{T}r_{J'_t}$，其中 $J'_t$ 表示第 $t$ 期实际成交的商品（未成交时该项为零）。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=5mm and 6mm,
+  box/.style={draw=black!55, rounded corners=2pt, fill=black!3, align=center,
+              minimum height=17mm, text width=32mm, font=\small},
+  arr/.style={-{Stealth[length=2.2mm]}, semithick, black!70}]
+\node[box] (a) {顾客到达\\识别类型 $i_t$};
+\node[box, right=of a] (b) {读取在线状态\\$(i_t,\ c_t,\ T-t+1)$};
+\node[box, right=of b] (c) {生成推荐集合 $S_t$\\$S_t\subseteq A(c_t)$\\$|S_t|\le K$};
+\node[box, right=of c] (d) {顾客浏览推荐列表\\至多购买一件};
+\node[box, below=9mm of $(b)!0.5!(c)$, text width=78mm, minimum height=13mm] (e)
+  {购买商品 $j$：库存 $c_{t+1}=c_t-e_j$，收入增加 $r_j$\\未购买：库存不变，$c_{t+1}=c_t$};
+\draw[arr] (a) -- (b);
+\draw[arr] (b) -- (c);
+\draw[arr] (c) -- (d);
+\draw[arr] (d.south) |- (e.east);
+\draw[arr] (e.west) -| node[pos=0.75, left, font=\footnotesize]{进入第 $t+1$ 期} (a.south);
+\end{tikzpicture}
+\caption{第 $t$ 期的推荐决策流程。$A(c_t)$ 为当前有货商品集合}
+\label{fig:flow}
+\end{figure}
+
+\subsection{顾客购买行为}
+题目以 $p_{ij}\in[0,1]$ 表示类型 $i$ 顾客购买商品 $j$ 的概率。推荐列表包含多件商品时，还需要刻画顾客在列表内部的选择方式。本文采用潜在首选（latent first choice）模型：类型 $i$ 的顾客到达时带有一个潜在首选商品 $J_t$，
+\begin{equation}
+\Pr(J_t=j\mid i_t=i)=p_{ij},\qquad \Pr(J_t=0\mid i_t=i)=1-\sum_{j=1}^{n}p_{ij},
+\end{equation}
+其中 $J_t=0$ 表示顾客只浏览、不购买。顾客的首选商品出现在推荐列表中且有货时，顾客购买该商品；其余情形下顾客离开。于是推荐集合 $S$ 下的成交概率为
+\begin{equation}
+\Pr(\text{购买 }j\mid i,S)=p_{ij}\ind\{j\in S\},\qquad
+\Pr(\text{未成交}\mid i,S)=1-\sum_{j\in S}p_{ij}.
+\label{eq:choice}
+\end{equation}
+
+式\eqref{eq:choice}有三点含义。第一，推荐集合的期望收益 $\sum_{j\in S}r_jp_{ij}$ 对商品可加，与题目离线模型的目标函数 $\sum_i\sum_jN_ir_jp_{ij}x_{ij}$ 具有相同结构。第二，每位顾客至多购买一件商品，要求 $\sum_jp_{ij}\le1$；课程实例中三类顾客的概率之和均为 $0.9$，即每位顾客有 $10\%$ 的概率只浏览不购买。第三，首选商品没有被推荐或已经缺货时，顾客直接离开，模型中不存在替代购买。因此，推荐位上每出现一件缺货商品，就有一部分顾客的购买意愿落空。模拟实验中，各策略在同一次重复里共享同一组潜在首选 $J_{1:T}$（公共随机数），策略间的收入差异只来自推荐决策本身。
+
+\subsection{信息结构与在线约束}
+营业开始前，平台掌握参数 $(r,P,\lambda,C,T,K)$。第 $t$ 期决策时，平台观察到当前顾客类型 $i_t$、当前库存 $c_t$ 以及此前全部顾客的类型与购买结果；后续顾客的类型尚未实现，平台只知道它们服从分布 $\lambda$。在线策略 $\pi$ 把上述信息映射为推荐集合，并满足
+\begin{equation}
+S_t\subseteq A(c_t):=\{j:c_{tj}>0\},\qquad |S_t|\le K.
+\label{eq:feasible}
+\end{equation}
+约束\eqref{eq:feasible}对应题目评分中的可行性要求：任何时刻都不推荐缺货商品。题目同时提醒，在线算法应避免在每一期求解整数规划，以满足实时决策的计算要求。本文的在线策略每期只求解变量数为 $mn$ 的连续线性规划，第\ref{sec:exp}节报告了其计算时间。
+
+\subsection{Hindsight 基准与遗憾}
+题目用 hindsight 评价在线算法：若整个到达序列事先已知，令 $N_i$ 为类型 $i$ 的实现人数，离线模型给出该序列上可以达到的最高期望总收入 $\mathrm{OPT}_{\mathrm{hind}}$。第\ref{sec:q2}节将建立含库存约束的离线模型，其最优值记为 $F(N,C)$。对策略 $\pi$ 和到达序列 $s$，遗憾为
+\begin{equation}
+\mathrm{Regret}_T(s)=\mathrm{OPT}_{\mathrm{hind}}(s)-R_T(\pi;s).
+\end{equation}
+购买结果随机，$R_T(\pi;s)$ 是随机变量。本文以条件期望 $\E[R_T(\pi)\mid s]$ 衡量策略在序列 $s$ 上的表现，记 $F_s=F(N^{(s)},C)$ 与期望遗憾 $G_s(\pi)=F_s-\E[R_T(\pi)\mid s]$，并按题目要求报告五份数据上的
+\begin{equation}
+\overline G(\pi)=\frac15\sum_{s=1}^{5}G_s(\pi),\qquad G_{\max}(\pi)=\max_{1\le s\le5}G_s(\pi).
+\label{eq:avgmax}
+\end{equation}
+第\ref{sec:eval}节给出 $\E[R_T(\pi)\mid s]$ 的精确计算方法，蒙特卡洛模拟用于交叉验证并刻画单次实现的波动。
+
+表\ref{tab:notation}汇总了主要符号。
+
+\begin{table}[htbp]
+\centering\small
+\caption{主要符号}\label{tab:notation}
+\begin{tabularx}{\linewidth}{@{}lX@{\qquad}lX@{}}
+\toprule
+符号 & 含义 & 符号 & 含义\\
+\midrule
+$T,\ t$ & 销售期长度与期数 & $C_j,\ c_{tj}$ & 商品 $j$ 的初始库存与第 $t$ 期决策前库存\\
+$n,\ m,\ K$ & 商品数、顾客类型数、推荐位数 & $A(c)$ & 库存为 $c$ 时的有货商品集合\\
+$r_j$ & 商品 $j$ 的价格 & $i_t,\ S_t$ & 第 $t$ 期顾客类型与推荐集合\\
+$\lambda_i$ & 类型 $i$ 的到达概率 & $N_i$ & 序列中类型 $i$ 的人数\\
+$p_{ij}$ & 类型 $i$ 购买商品 $j$ 的概率 & $F(N,c)$ & 离线流体线性规划的最优值\\
+$v_{ij}=r_jp_{ij}$ & 单次推荐的期望收益 & $R_T,\ G_s$ & 总收入与序列 $s$ 上的期望遗憾\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{课程实例与初步分析}\label{sec:instance}
+题目实例\cite{assignment}的参数为
+\begin{equation}
+T=100,\quad m=n=3,\quad K=2,\quad r=(10,8,6),\quad C=(40,35,25),\quad \lambda=(0.5,0.3,0.2),
+\label{eq:instance}
+\end{equation}
+\begin{equation}
+P=\begin{pmatrix}0.6&0.2&0.1\\0.4&0.5&0.0\\0.1&0.2&0.6\end{pmatrix}.
+\end{equation}
+五份到达数据的时期均为 $1,\ldots,100$，各类型人数都等于期望人数 $(50,30,20)$，到达顺序互不相同。以游程数（相邻两期类型不同的次数加 1）衡量顺序的混合程度，五份数据为 \RunsMin--\RunsMax，$(50,30,20)$ 的随机排列的期望游程数为 $63.0$，95\% 区间为 [\RunsLo, \RunsHi]，五份数据可以视为随机排列的典型样本。
+
+\begin{table}[htbp]
+\centering\small
+\caption{单次期望收益 $v_{ij}=r_jp_{ij}$、算法 1 的推荐集合与 Top-2 下的期望需求}\label{tab:instance}
+\begin{tabular}{lcccc}
+\toprule
+ & 商品 1 ($r_1=10$) & 商品 2 ($r_2=8$) & 商品 3 ($r_3=6$) & 算法 1 的 $S$\\
+\midrule
+类型 1 ($N_1=50$) & 6.0 & 1.6 & 0.6 & $\{1,2\}$\\
+类型 2 ($N_2=30$) & 4.0 & 4.0 & 0.0 & $\{1,2\}$\\
+类型 3 ($N_3=20$) & 1.0 & 1.6 & 3.6 & $\{2,3\}$\\
+\midrule
+期望需求 $D^{\mathrm{top}}_j$ & 42 & 29 & 12 & \\
+初始库存 $C_j$ & 40 & 35 & 25 & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表\ref{tab:instance}揭示了实例的结构。类型 1 顾客最看重商品 1，类型 2 顾客对商品 1 与商品 2 的期望收益相同，类型 3 顾客偏好商品 3。若每位顾客都获得其 Top-2 推荐，三种商品的期望需求为
+\begin{equation}
+D^{\mathrm{top}}=\bigl(50\times0.6+30\times0.4,\ 50\times0.2+30\times0.5+20\times0.2,\ 20\times0.6\bigr)=(42,\,29,\,12).
+\end{equation}
+与库存 $(40,35,25)$ 相比，商品 1 存在 2 件缺口，商品 2、3 分别富余 6 件和 13 件。库存矛盾集中在商品 1：类型 1 与类型 2 顾客同时需要它，其中类型 1 顾客还有商品 3 这一替代选择（$v_{13}=0.6$），类型 2 顾客对商品 3 的购买概率为零（$p_{23}=0$）。哪一类顾客让出商品 1、让出多少，是第\ref{sec:q2}节离线模型与第\ref{sec:policy}节在线策略的核心问题。2 件的缺口只占商品 1 库存的 $5\%$，这一实例属于库存轻度紧张的情形；第\ref{sec:exp}节还会把库存缩放到更紧张和更充裕的水平。
