@@ -30,10 +30,10 @@
 $\beta_j\ge0$ 来自对偶可行性。记 $\mu,\nu$ 为其余约束的最优对偶变量，在库存为 $c-e_j$ 的线性规划中，$(\beta,\mu,\nu)$ 仍然对偶可行，由弱对偶得 $F(\tau\lambda,c-e_j)\le F(\tau\lambda,c)-\beta_j$，即 $\beta_j\le\Delta_j$。另一方面，取库存为 $c$ 时的一个最优解 $y$；若商品 $j$ 的期望销量超过 $c_j-1$，按比例缩小各 $y_{ij}$，使其期望销量降为 $c_j-1$。销量至多减少一件，收入至多减少 $r_j$，其余约束仍然满足，故 $F(\tau\lambda,c-e_j)\ge F(\tau\lambda,c)-r_j$，即 $\Delta_j\le r_j$。
 \end{proof}
 
-由于每期至多售出一件，$c_j>\tau$ 时商品 $j$ 在剩余期内不会售罄，可以把库存截断为 $\min\{c_j,\tau\}$ 后再求解，此时 $\Delta_j=0$。命题\ref{prop:order}说明，三种策略对稀缺商品的保守程度依次为 $\Greedy<\LPDual\le\LPFD$。$F(\tau\lambda,\cdot)$ 是分段线性凹函数，$\beta_j$ 是当前库存处的局部斜率，$\Delta_j$ 是向左一个单位区间上的平均斜率。在斜率发生跳变的位置附近，有限差分会提前计入下一段更高的边际价值。
+由于每期至多售出一件，$c_j>\tau$ 时可以将其截断为 $\tau$ 而保持流体最优值，此时 $\Delta_j=0$。命题\ref{prop:order}比较的是三种策略对同一件商品给出的机会成本。固定其他库存时，$F$ 关于 $c_j$ 是分段线性凹函数；在各段内部，$\beta_j$ 等于该段的斜率，在断点处可有多个最优对偶价格。$\Delta_j$ 是向左一个单位区间上的平均斜率。如果这一个单位跨过断点，有限差分就会计入左侧更高的边际价值。最终推荐集合还取决于其他商品的评分和并列规则。
 
 \subsection{算法}
-算法\ref{alg:dual}给出主策略 \LPDual{} 的完整步骤。离线模型\eqref{eq:lp}只在开始时建立一次，此后每期只修改约束右端项与变量上界，可以利用上一期的单纯形基热启动。
+算法\ref{alg:dual}复用同一个线性规划模型，随剩余需求和库存更新约束右端项与变量上界。\LPDual{} 首次遇到一个状态时重置单纯形基，以单线程对偶单纯形法冷启动求解，保存得到的库存对偶价格。同一状态再次出现时直接读取缓存。固定求解器版本、参数和模型中行列的顺序后，即使最优对偶解有多个，先前访问状态的次序也不会改变所取的价格。
 
 \setcounter{algorithm}{1}% the assignment's Algorithm 1 keeps its number
 \begin{algorithm}[htbp]
@@ -46,11 +46,11 @@ $\beta_j\ge0$ 来自对偶可行性。记 $\mu,\nu$ 为其余约束的最优对�
 \State build LP \eqref{eq:lp} once with variables $y_{ij}$ \Comment{later only RHS and bounds change}
 \For{$t=1$ \textbf{to} $T$}
   \State observe $i\gets i_t$; \ $\tau\gets T-t$ \Comment{customers after the current one}
-  \If{$\tau=0$}
+  \If{$\tau=0$ or $c=0$}
     \State $\theta\gets 0$
   \Else
     \State $c^{\tau}_j\gets\min\{c_j,\tau\}$ for all $j$
-    \State solve $F(\tau\lambda,c^{\tau})$; \ $\theta\gets\beta$ \Comment{duals of the inventory rows}
+    \State $\theta\gets\operatorname{CachedDual}(\tau\lambda,c^{\tau})$ \Comment{cold solve and cache on a miss}
   \EndIf
   \State $E\gets\{\,j\in A(c):\ p_{ij}r_j>0,\ \ s_j:=p_{ij}(r_j-\theta_j)\ge 0\,\}$
   \State sort $E$ by $s_j$ (descending), then $p_{ij}r_j$ (descending), then $j$ (ascending)
@@ -68,14 +68,14 @@ $\beta_j\ge0$ 来自对偶可行性。记 $\mu,\nu$ 为其余约束的最优对�
 \begin{equation*}
 \textbf{for } j\in A(c)\textbf{ do }\ \theta_j\gets F(\tau\lambda,c^{\tau})-F\bigl(\tau\lambda,(c-e_j)^{\tau}\bigr)\ \textbf{end for},
 \end{equation*}
-其余步骤不变。
+实现中缓存各状态的最优目标值。有限差分只使用这些目标值，同一线性规划模型可沿用上一次求解的基热启动。
 
 \textbf{剩余人数预测 \LPCount{}。} 若平台事先知道整个销售期各类型的总人数 $N$（例如题目给出的五份数据均为 $(50,30,20)$），可以把算法\ref{alg:dual}中的 $\tau\lambda$ 替换为剩余人数的预测
 \begin{equation}
-d_t=\frac{\tau}{\sum_k(N_k-n_{tk})^+}\,(N-n_t)^+,
+d_t=N-n_t,\qquad \sum_k d_{tk}=\tau,
 \label{eq:countforecast}
 \end{equation}
-其中 $n_{tk}$ 为前 $t$ 期（含当期）已到达的类型 $k$ 顾客人数。$d_t$ 只用到已观察到的到达和总人数，不使用未来顾客的到达顺序。第\ref{sec:order}节用它衡量到达顺序信息的价值。
+其中 $n_{tk}$ 为前 $t$ 期（含当期）已到达的类型 $k$ 顾客人数。每期观察到当前类型后更新一次 $n_t$；精确评价时，同一期的不同库存状态共享这份前缀计数。策略使用事先给定的总人数和已经观察到的到达，第\ref{sec:order}节用它考察总人数信息如何影响预留决策。
 
 \textbf{评分规则的细节。} 第 11 行要求 $p_{ij}r_j>0$，从而购买概率为零的商品不会占用推荐位。评分等于零的商品仍可进入推荐列表：机会成本等于价格时，推荐该商品与空出推荐位的近似价值相同，而前者在库存最终未被占用时还能带来收入。评分相同时优先即时收益较高的商品，再按编号排序，因此策略是状态的确定性函数。比较评分前把数值舍入到 $10^{-9}$，以消除单纯形求解的浮点误差。需要指出，评分并列并非偶然：由互补松弛条件，流体最优解中被同一类顾客混合使用的推荐集合，其调整后收益必然相等。例如 $\beta^{*}=(9,0,0)$ 时，类型 1 顾客对商品 1 与商品 3 的评分都等于 $0.6$。并列规则因此是策略的实质组成部分，第\ref{sec:sens}节讨论它的影响。
 
@@ -103,7 +103,7 @@ s_{1\cdot}=(0.6,\ 1.6,\ 0.6),\qquad s_{2\cdot}=(0.4,\ 4.0,\ 0),\qquad s_{3\cdot}
 \end{equation}
 为预留阈值（不存在时取 0）。图\ref{fig:threshold}比较了三种策略的预留阈值：\LPDual{} 的阈值约为 $\lfloor0.12(H-1)\rfloor$，\LPFD{} 约多一件。\IIDDP{} 的阈值约为 \LPDual{} 的两倍，因为随机需求的波动使商品 1 在库存略高于流体需求时仍有较大的售罄概率，动态规划为此保留安全库存。
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.64\linewidth]{figures/threshold.pdf}
 \caption{预留阈值 $\bar c_1(H)$：库存不超过该值时，类型 1 顾客不再看到商品 1（$c_2=35$，$c_3=25$）。灰线为类型 2 对商品 1 的流体需求 $0.12(H-1)$}

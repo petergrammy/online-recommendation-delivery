@@ -18,6 +18,42 @@ def small_instance(K=2):
 
 
 class FluidModel(unittest.TestCase):
+    def test_inventory_scaling_segments_and_breakpoints(self):
+        ins = default_instance()
+        lp = FluidLP(ins)
+        self.addCleanup(lp.close)
+        counts = [50, 30, 20]
+        # Interior samples have well-defined inventory prices, including the short second segment.
+        interiors = [
+            (.67, 830 * .67, [10, 8, 6]),
+            (.681, 680 * .681 + 102, [10, 8, 0]),
+            (.75, 535 * .75 + 201, [9, 5, 0]),
+            (1.0, 706, [9, 0, 0]),
+            (1.1, 724, [0, 0, 0]),
+        ]
+        for theta, expected, prices in interiors:
+            with self.subTest(theta=theta):
+                result = lp.solve(counts, theta * ins.capacities, details=True, cold=True)
+                self.assertAlmostEqual(result['value'], expected, places=7)
+                np.testing.assert_allclose(result['duals'], prices, atol=1e-7)
+        # At a breakpoint multiple dual solutions can support the same optimal value.
+        for theta, value in [(17 / 25, 2822 / 5), (99 / 145, 16422 / 29),
+                             (29 / 35, 4510 / 7), (21 / 20, 724)]:
+            with self.subTest(breakpoint=theta):
+                self.assertAlmostEqual(lp.solve(counts, theta * ins.capacities), value, places=7)
+
+    def test_customer_binary_plan_can_undervalue_adaptive_offers(self):
+        ins = Instance([1], [[.6]], [1], [1], 1)
+        # A fixed binary plan schedules zero, one or two offers before any purchase occurs.
+        fixed_sales = [offers * .6 for offers in range(3)]
+        fixed_value = max(sales for sales in fixed_sales if sales <= ins.capacities[0])
+        adaptive_value, _, _ = dp_benchmark(ins, 2, sequence=[0, 0])
+        lp = FluidLP(ins)
+        self.addCleanup(lp.close)
+        self.assertAlmostEqual(fixed_value, .6)
+        self.assertAlmostEqual(adaptive_value, .84)
+        self.assertAlmostEqual(lp.solve([2], ins.capacities), 1)
+
     def test_known_fluid_solution_and_duality(self):
         ins = default_instance()
         lp = FluidLP(ins)
@@ -139,6 +175,21 @@ class Policies(unittest.TestCase):
         finally:
             policy.close()
         self.assertLess(abs(np.mean(sims) - exact), 4 * np.std(sims) / np.sqrt(len(sims)))
+
+    def test_exact_count_forecast_observes_each_customer_once(self):
+        ins = small_instance()
+        seq = np.array([1] * 5 + [0] * 8 + [2] * 5)
+        totals = np.bincount(seq, minlength=ins.m)
+        lattice = Lattice(ins)
+        for cls, duals in [(LPLookahead, False), (LPDual, True)]:
+            with self.subTest(policy=cls.__name__):
+                policy = cls(ins, forecast='count', totals=totals)
+                self.addCleanup(policy.close)
+                value = exact_policy_value(ins, seq, policy)
+                np.testing.assert_array_equal(policy.seen, totals)
+                offers = count_lp_offer(ins, seq, totals, lattice, workers=1, duals=duals)
+                reference = exact_forward(ins, seq, offers, lattice)
+                self.assertAlmostEqual(value, reference.expected_revenue, places=9)
 
     def test_generic_feasibility_and_prefix_causality(self):
         rng = np.random.default_rng(163)

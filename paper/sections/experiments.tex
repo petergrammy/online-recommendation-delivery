@@ -1,7 +1,7 @@
 \section{数值实验}\label{sec:exp}
 
 \subsection{实验设计}\label{sec:design}
-表\ref{tab:policies}列出参与比较的策略。前五种是在线策略，\SeqDP{} 预知整条类型序列，只作为策略损失的基准。所有策略在全部实验中使用相同的规则与参数，没有针对任何数据集调整。
+表\ref{tab:policies}列出各策略可观察的信息。主策略 \LPDual{} 只使用当前类型、库存、剩余期数和到达率。\LPCount{} 额外知道各类型总人数，\SeqDP{} 预知整条类型序列。所有序列使用相同的决策规则。
 
 \begin{table}[htbp]
 \centering\small
@@ -30,10 +30,10 @@
 \item 销售期 $T$ 从 25 增至 1600、库存同比例放大（第\ref{sec:scale}节）；
 \item 随机生成的较大实例，最大为 $(m,n,T,K)=(20,30,300,4)$（第\ref{sec:scale}节）。
 \end{enumerate}
-第 (1)--(4) 组的期望值均由第\ref{sec:exact}节的方法精确计算，第 (5)、(6) 组的状态空间过大，采用蒙特卡洛模拟。计算环境为 Python 3.11.9、Gurobi 13.0.3（单线程对偶单纯形法）、NumPy 1.26.4。
+前四组实验固定每条到达序列，用第\ref{sec:exact}节的递推计算条件期望。后两组用蒙特卡洛模拟，按各自独立抽取的序列或实例构造置信区间。原始实验环境为 Python 3.11.9、Gurobi 13.0.3（单线程对偶单纯形法）和 NumPy 1.26.4。
 
 \subsection{五份数据上的结果}\label{sec:main}
-表\ref{tab:main}给出主策略 \LPDual{} 的逐份结果，表\ref{tab:aggregate}汇总各策略的表现。\LPDual{} 在五份数据上的平均期望收入为 \ERDual{}，达到离线上界 706 的 \RatioDual\%；平均遗憾 $\overline G=\GavgDual$，最大遗憾 $G_{\max}=\GmaxDual$，全部推荐满足库存约束。期末平均剩余商品 1 \EconeDual{} 件、商品 2 \EctwoDual{} 件、商品 3 \EcthreeDual{} 件，商品 1 在 \SoldOutEndDual\% 的路径上售罄。商品 2、3 的剩余量与流体解的剩余量 $\bar c=(0,\,6,\,38/3)$ 接近，说明商品 2、3 本身库存充裕，剩余是需求不足的自然结果；商品 1 是唯一的稀缺商品。
+表\ref{tab:main}同时列出主策略的精确条件期望与每份数据第一次购买模拟的实现值。以共同的流体上界 706 为基准，平均期望收入为 \ERDual{}，平均期望遗憾为 \GavgDual{}，五组中最大的期望遗憾为 \GmaxDual。若按题目定义逐次计算 $F_s-R_T$，五条首次模拟路径的平均实现遗憾为 \FirstMeanRegret{}，最大为 \FirstMaxRegret{}，缺货推荐共 \FirstOosSlots{} 次。数据 2 的首次实现收入超过 706，因而该次遗憾为负。
 
 \input{tables/main}
 \input{tables/aggregate}
@@ -46,7 +46,7 @@
 \item 算法 1 在五份数据上的期望收入都是 \AlgOneER{}，平均每条路径出现 \AlgOneOOS{} 次缺货推荐，比 \Greedy{} 低 \AlgOneLossGreedy。
 \end{itemize}
 
-模拟结果与精确值吻合：五种可模拟策略在五份数据上的 \MCtotal{} 个模拟均值中，有 \MCinside{} 个落在精确值的 95\% 置信区间内，标准化偏差 $|\overline R_s-\E R_T|\sqrt B/\hat\sigma_s$ 的最大值为 \MCmaxZ。需要注意，$B=2000$ 时单个策略的置信区间半宽约为 \MChw，大于策略之间 0.3--0.9 的期望收入差异，仅凭模拟均值无法可靠地给策略排序。公共随机数大幅降低了配对比较的方差：\LPDual{} 与 \Greedy{} 在 \MCpairEqual\% 的重复中收入完全相同，配对差的半宽只有约 \MCpairhw。精确评价彻底消除了这一不确定性。图\ref{fig:mainloss}按数据集给出四种策略的策略损失。
+对六种可模拟策略和五份数据分别构造模拟均值的 95\% 置信区间，\MCtotal{} 个区间中有 \MCinside{} 个包含相应的精确期望收入，最大标准化偏差为 \MCmaxZ。每份数据做 $B=2000$ 次重复，\LPDual{} 收入均值区间的平均半宽为 \MChw{}，大于它与 \Greedy{} 的平均收入差 \DualGreedyAvg。两种策略在 \MCpairEqual\% 的配对重复中收入相同，配对差区间的平均半宽仅为 \MCpairhw。图\ref{fig:mainloss}给出四种策略在各序列上与预知序列最优策略的精确收入差。
 
 \begin{figure}[htbp]
 \centering
@@ -56,18 +56,22 @@
 \end{figure}
 
 \subsection{遗憾的构成}\label{sec:decomp}
-按式\eqref{eq:gap}分解，五份数据的流体松弛间隙 $F_s-V^{\seq}_s$ 介于 \FluidGapMin{} 与 \FluidGapMax{} 之间，平均为 \FluidGap，占 \LPDual{} 平均遗憾的 \FluidShare\%。换言之，\LPDual{} 的遗憾几乎全部来自流体模型与随机系统之间的差异，在线决策本身造成的损失只有 \LavgDual。
+五份数据的流体松弛间隙 $F_s-V^{\seq}_s$ 介于 \FluidGapMin{} 与 \FluidGapMax{} 之间，平均为 \FluidGap，占 \LPDual{} 平均期望遗憾的 \FluidShare\%。式\eqref{eq:gap}中的另一项为 \LavgDual，衡量 \LPDual{} 与预知类型序列的最优决策之间的平均收入差，其中也包含未来顾客类型未知的代价。
 
 由于 $R_T=\sum_jr_j(C_j-c_{T+1,j})$ 且 $F=\sum_jr_js^{*}_j$（$s^{*}=(40,29,37/3)$ 为流体最优销量），期望遗憾可以按商品精确分解：
 \begin{equation}
 G_s=\sum_{j=1}^{n}\delta_j,\qquad \delta_j=r_j\bigl(\E c_{T+1,j}-\bar c_j\bigr),\qquad \bar c_j=C_j-s^{*}_j,
 \label{eq:productgap}
 \end{equation}
-其中 $\bar c=(0,\,6,\,38/3)$ 是流体解的剩余库存，$\delta_j$ 是商品 $j$ 比流体解多剩下的库存所对应的收入。表\ref{tab:product}显示，\LPDual{} 的遗憾中有 \ContribOneDual（\ContribOneShare\%）来自商品 1 的剩余。流体解恰好卖完 40 件商品 1，随机系统做不到这一点。若每位类型 1、2 顾客都看到商品 1，商品 1 的潜在购买次数 $D_1=\mathrm{Bin}(50,0.6)+\mathrm{Bin}(30,0.4)$ 的均值为 42、标准差为 \DemandOneSd，$\Pr(D_1<40)=\DemandOneShort\%$，$\E(40-D_1)^+=\DemandOneLeft$。也就是说，即使从不预留商品 1，期末平均仍会剩下约 0.92 件，对应约 9.2 的收入。这部分剩余由需求的随机性决定，预知顾客类型的 \SeqDP{} 也剩下 \EconeSeq{} 件。
+其中 $\bar c=(0,\,6,\,38/3)$ 是流体解的期末库存。表\ref{tab:product}中商品 1 的收入差额为 \ContribOneDual，占 \LPDual{} 平均期望遗憾的 \ContribOneShare\%。这个数字由该策略的期末库存计算。为区分需求波动和展示规则的影响，可以计算两种曝光范围下的余量。
+\begin{itemize}
+\item 算法 1 只向类型 1、2 展示商品 1。潜在需求 $D_{12}$ 服从两个独立二项变量 $\mathrm{Bin}(50,0.6)$ 和 $\mathrm{Bin}(30,0.4)$ 之和，其均值为 42，标准差为 \DemandOneSd。虽然均值超过库存 40，仍有 \DemandOneShort\% 的概率需求少于库存，期末平均剩余 $\E(40-D_{12})^+=\DemandOneLeft$ 件。
+\item 类型 3 首选商品 1 的概率也有 $0.1$。若向三类顾客都展示有货的商品 1，潜在需求为 $D_{\mathrm{all}}=D_{12}+D_3$，其中 $D_3\sim\mathrm{Bin}(20,0.1)$ 与前两类需求独立。此时商品 1 的期末期望余量降为 $\E(40-D_{\mathrm{all}})^+=\DemandOneLeftAll$ 件。这给出任意策略的商品 1 期末期望余量下界。向更多顾客展示它会占用其他商品的推荐位，判断总收入还须计入后者的销售变化。
+\end{itemize}
 
 \input{tables/product}
 
-收入的随机波动远大于策略间的差异。图\ref{fig:dist}给出 \LPDual{} 在数据 1 上的精确收入分布：标准差约为 \SdDual，单条路径的收入超过 $F=706$ 的概率为 \ProbAboveFDOne\%（五份数据为 \PnegDualMin\%--\PnegDualMax\%），这些路径的样本遗憾为负。题目要求的遗憾若按单次实现计算，主要反映购买结果的运气。本文因此以条件期望 $\E[R_T\mid s]$ 定义 $G_s$，并在表\ref{tab:main}中同时报告模拟均值与置信区间。
+图\ref{fig:dist}给出 \LPDual{} 在数据 1 上的精确收入分布。单条路径收入超过 $F=706$ 的概率为 \ProbAboveFDOne\%（五份数据为 \PnegDualMin\%--\PnegDualMax\%）。表\ref{tab:main}的首次模拟保留了这种购买波动，按购买结果取条件期望后则可直接比较同一到达序列上的两种策略。
 
 \begin{figure}[htbp]
 \centering
@@ -105,7 +109,7 @@ L_s(\pi)=\sum_{t=1}^{T}\E_{\pi}\bigl[Q^{*}_t(c_t)-Q_t(c_t,S^{\pi}_t)\bigr],
 \end{figure}
 
 \subsection{生成序列上的表现}\label{sec:random}
-五份给定数据只是众多可能到达顺序中的五个样本。为检验结论是否依赖这五个样本，本文生成了两组序列：500 条人数固定为 $(50,30,20)$ 的随机排列，与给定数据的生成方式相同；500 条按 $\lambda$ 独立同分布生成的序列，各类型人数随机，$F_s$ 介于 \FminIid{} 与 \FmaxIid{} 之间。第\ref{sec:instance}节已说明，五份给定数据可以视为第一组序列的典型样本。表\ref{tab:random}与图\ref{fig:random}给出精确评价的结果。
+为区分顺序变化与顾客构成变化，本文生成两组序列。第一组把 $(50,30,20)$ 位顾客均匀随机排列，五份课程数据也具有这一人数构成。题目只给出了五条实现顺序，其游程数与均匀随机排列的参照区间相容。第二组令各期类型按 $\lambda$ 独立同分布到达，人数也随抽样变化，因此 $F_s$ 介于 \FminIid{} 与 \FmaxIid{} 之间。每组生成 500 条序列，逐条计算期望收入，结果见表\ref{tab:random}和图\ref{fig:random}。
 
 \input{tables/random}
 
@@ -116,7 +120,7 @@ L_s(\pi)=\sum_{t=1}^{T}\E_{\pi}\bigl[Q^{*}_t(c_t)-Q_t(c_t,S^{\pi}_t)\bigr],
 \label{fig:random}
 \end{figure}
 
-随机排列上，\LPDual{} 的平均遗憾为 \GavgDualPerm，低于 \Greedy{} 的 \GavgGreedyPerm{} 与 \LPFD{} 的 \GavgFDPerm{}；它在 \DualBeatsGreedyPerm\% 的序列上不低于 \Greedy{}，在 \DualBeatsFDPerm\% 的序列上不低于 \LPFD{}。\IIDDP{} 的平均策略损失为 \LavgIIDPerm，低于 \LPDual{} 的 \LavgDualPerm，后者在 \DualBeatsIIDPerm\% 的序列上不低于 \IIDDP{}。这一结果符合预期：随机排列接近独立同分布到达，此时 \IIDDP{} 是最优在线策略。\LPDual{} 只需求解规模为 $mn$ 的线性规划，就取得了 \IIDDP{} 的大部分收益。独立同分布序列上的排序相同。
+固定人数随机排列组中，\LPDual{} 的平均期望遗憾为 \GavgDualPerm，低于 \Greedy{} 的 \GavgGreedyPerm{} 与 \LPFD{} 的 \GavgFDPerm。\IIDDP{} 的平均策略损失为 \LavgIIDPerm，低于 \LPDual{} 的 \LavgDualPerm。这里是无放回抽取：若已观察 $t$ 人、其中类型 $i$ 有 $n_{ti}$ 人，给定总人数时下一位客人属于该类的概率为 $(N_i-n_{ti})/(T-t)$（$t<T$）。\IIDDP{} 始终以 $\lambda_i$ 预测未来，因此在该组的优势是实验结果。第二组的独立同分布到达满足式\eqref{eq:iiddp}的假设，\IIDDP{} 在该分布下最大化期望收入；这 500 条序列上的平均期望遗憾为 \GavgIIDIid，\LPDual{} 为 \GavgDualIid。
 
 \LPFD{} 的损失分布有一条长尾，最大值为 \LmaxFDPerm，而 \LPDual{} 不超过 \LmaxDualPerm。长尾来自期末的过度预留：\LPFD{} 的策略损失与最后 10 期类型 2 顾客人数的相关系数为 \CorrFDLastTen{}，损失最大的 10 条序列在最后 10 期至多有 \TopFDLastTenMax{} 位类型 2 顾客（期望为 3 位）。\Greedy{} 与 \LPDual{} 的损失则与最后 20 期类型 2 的人数正相关（相关系数分别为 \CorrGreedyLastTwenty{} 与 \CorrDualLastTwenty{}），它们的主要风险是多卖，后段类型 2 顾客越多，越早售罄商品 1 的代价越大。算法 1 的推荐集合只依赖顾客类型，各商品的销量只取决于各类型的人数，与到达顺序无关，因此它在全部 500 条随机排列上的期望收入相同。
 
@@ -148,13 +152,13 @@ L_s(\pi)=\sum_{t=1}^{T}\E_{\pi}\bigl[Q^{*}_t(c_t)-Q_t(c_t,S^{\pi}_t)\bigr],
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/theta.pdf}
-\caption{库存缩放下的平均策略损失（左）与算法 1 的平均策略损失（右）}
+\caption{库存系数 $\theta$ 对五份数据平均结果的影响。左为库存感知策略与 \SeqDP{} 的收入差，中为算法 1 与 \SeqDP{} 的收入差，右为算法 1 每条路径的缺货推荐次数}
 \label{fig:theta}
 \end{figure}
 
 库存水平决定了在线决策的难度。$\theta\le0.4$ 时三种商品都严重短缺，每件库存几乎都能售出，除算法 1 外各策略都接近最优；$\theta\ge1.1$ 时库存几乎不构成约束，\Greedy{} 已接近最优。中间区域的库存分配最关键：$\theta=0.7$ 时 \Greedy{} 的策略损失达到 \ThetaSevenLGreedy，\LPDual{} 降至 \ThetaSevenLDual，\IIDDP{} 只有 \ThetaSevenLIID。两种 LP 策略在 $\theta\le0.9$ 时表现接近，课程实例 $\theta=1$ 附近的差别来自第\ref{sec:where}节分析的期末过度预留。$\theta=0.6$--$0.8$ 时，LP 策略与 \IIDDP{} 之间仍有约 1.3--3.3 的差距。损失分解显示，$\theta=0.7$ 时 \LPDual{} 的 \LossThetaSevenDual{} 策略损失中有 \SellThetaSevenDual{} 是类型 1 多卖。此时开始的对偶价格为 $\beta=(9,5,0)$，类型 1 顾客对三种商品的评分都是 $0.6$，三者并列，按即时收益推荐了商品 1、2。动态规划的判断不同：库存紧张时商品 1 迟早会售罄，暂不卖给当前的类型 1 顾客几乎没有损失（后来的类型 1 顾客仍会买走它），却保留了卖给类型 2 顾客的机会。流体模型只比较期望值，看不到这种由需求波动产生的期权价值，随机动态规划在库存紧张时因此仍有改进空间。
 
-算法 1 的损失随库存减少而迅速上升。$\theta=0.5$ 时，它平均每条路径推荐 \ThetaHalfW{} 次缺货商品（共 200 个推荐位），策略损失为 \ThetaHalfLAlg；损失在 $\theta=0.7$ 时达到 \ThetaSevenLAlg。这从数量上回答了问题一：库存越紧张，忽略库存造成的损失越大。
+算法 1 的缺货推荐次数随库存收紧而增加，收入损失则在中度紧张时最大。$\theta$ 从 0.7 降至 0.3 时，每条路径的平均缺货推荐由 \ThetaSevenW{} 增至 \ThetaThreeW{} 次（共 200 个推荐位），相对 \SeqDP{} 的平均收入损失却由 \ThetaSevenLAlg{} 降至 \ThetaThreeLAlg。当各品库存极少时，算法 1 也几乎售完全部商品，售罄后占用的推荐位很少再有机会产生收入。在中度紧张时，平台仍有其他有货商品可展示，忽略库存造成的收入损失更大。
 
 \begin{proposition}\label{prop:kn}
 当 $K\ge n$ 时，每期推荐全部有货且 $p_{ij}>0$ 的商品在每条样本路径上都达到最大收入
@@ -173,20 +177,18 @@ R^{*}=\sum_{j=1}^{n}r_j\min\Bigl\{C_j,\ \sum_{t=1}^{T}\ind\{J_t=j\}\Bigr\}.
 \subsection{规模扩展与计算时间}\label{sec:scale}
 \textbf{课程实例上的计算时间。} 主实验共 100 万次决策，借助按 $(\tau,c^{\tau})$ 的缓存，\LPDual{} 共求解 \SolvesDual{} 个线性规划，\LPFD{} 求解 \SolvesFD{} 个。不命中缓存的决策中，\LPDual{} 的决策时间中位数为 \TimeDualMedian{} 毫秒，95\% 分位数为 \TimeDualP{} 毫秒；\LPFD{} 分别为 \TimeFDMedian{} 毫秒和 \TimeFDP{} 毫秒。
 
-\textbf{销售期放大。} 把销售期放大为 $T$，库存同比例放大为 $\lfloor TC/100\rceil$，每个 $T$ 生成 10 条人数为 $T\lambda$ 的随机排列并模拟，结果见表\ref{tab:scaling}。\LPDual{} 的遗憾估计在 $T$ 从 25 增至 \ScaleTmax{} 的过程中处于 \ScaleGDualMin--\ScaleGDualMax{} 之间，没有随 $T$ 增长的趋势。$T$ 较大时单条路径收入的标准差随 $\sqrt T$ 增大，遗憾估计的置信半宽随之变宽（$T=\ScaleTmax$ 时为 \ScaleDualHwMax），但 $\overline R^{\LPDual}/F$ 从 $T=25$ 的 95\% 升至 $T=\ScaleTmax$ 的 \ScaleRatioMax\%，相对遗憾持续下降，符合流体近似在大规模下趋于准确的一般结论\cite{gallego,jasin}。\Greedy{} 则不同。在流体近似下，\Greedy{} 以 $0.5\times0.6+0.3\times0.4=0.42$ 的速率消耗商品 1，在 $t^{*}=0.4T/0.42$ 时售罄，此前每期期望收入为 7.24；此后类型 1 改看 $\{2,3\}$，类型 2 只剩商品 2 可买，每期期望收入降为 3.34。商品 2、3 的消耗分别不超过 $0.29T$ 与 $0.13T$，在销售期内不会售罄。于是
+\textbf{销售期放大。} 把销售期放大为 $T$，库存同比例放大为 $\lfloor TC/100\rceil$。每个 $T$ 将人数 $T\lambda$ 取整并保持总数为 $T$，生成 10 条随机排列。表\ref{tab:scaling}按序列计算置信区间，将每条序列上多次购买重复的平均结果视为一个观测。\LPDual{} 的平均遗憾估计介于 \ScaleGDualMin{} 与 \ScaleGDualMax{} 之间，$T=\ScaleTmax$ 时的区间半宽为 \ScaleDualHwMax，绝对遗憾随规模的变化尚难辨别。各个 $T$ 上的实测收入与流体上界之比从约 95\% 升至 \ScaleRatioMax\%。对 \Greedy{}，流体近似还可求出一个显式基准。商品 1 以 $0.5\times0.6+0.3\times0.4=0.42$ 的速率消耗，在 $t^{*}=0.4T/0.42$ 时售罄，此前每期期望收入为 7.24。此后类型 1 改看 $\{2,3\}$，类型 2 只剩商品 2 可买，每期期望收入降为 3.34。商品 2、3 的消耗分别不超过 $0.29T$ 与 $0.13T$，在该流体路径上仍有剩余。因此
 \begin{equation}
 F-R^{\Greedy}_{\mathrm{fluid}}=7.06\,T-\bigl[7.24\,t^{*}+3.34\,(T-t^{*})\bigr]\approx0.0057\,T,
 \label{eq:greedyfluid}
 \end{equation}
-即 \Greedy{} 的遗憾中有一项随 $T$ 线性增长。单个策略的遗憾估计噪声太大，看不出这一趋势；公共随机数下的配对差则精确得多。表\ref{tab:scaling}中，$T\le100$ 时 \LPDual{} 与 \Greedy{} 的配对收益差不超过 \ScaleGapSmall，此后随 $T$ 近似线性扩大，$T=\ScaleTmax$ 时为 $\ScaleGreedyGapMax\pm\ScaleGreedyGapMaxHw$，与式\eqref{eq:greedyfluid}给出的 \ScaleGreedyFluid{} 量级一致。课程实例的 $T=100$ 规模较小，这一差异被需求波动掩盖；销售期越长、顾客越多，考虑库存机会成本的收益越明显。
+这一线性项对应 \Greedy{} 流体路径与流体最优解之间的差额。对随机系统，采用公共随机数的配对实验显示：$T\le100$ 时两种策略的平均收入差不超过 \ScaleGapSmall；在观察的较大规模上差距扩大，$T=\ScaleTmax$ 时为 $\ScaleGreedyGapMax\pm\ScaleGreedyGapMaxHw$，与式\eqref{eq:greedyfluid}给出的 \ScaleGreedyFluid{} 处在同一量级。
 
 \input{tables/scaling}
 
-\textbf{较大的随机实例。} 按 Dirichlet 分布生成购买概率（含不购买选项），价格为 4--20 的整数，到达率也按 Dirichlet 分布生成，库存取算法 1 期望需求的 $\rho$ 倍，$\rho\in\{0.6,0.9\}$，结果见表\ref{tab:large}。这组实验主要检验可行性与计算时间：
+\textbf{较大的随机实例。} 按 Dirichlet 分布生成购买概率和到达率，价格取 4--20 的整数，库存取算法 1 期望需求的 $\rho$ 倍，$\rho\in\{0.6,0.9\}$。附录表\ref{tab:large}按配置列出完整结果。
 \begin{itemize}
 \item \textbf{可行性。} 在全部 \LargeInstances{} 个实例、5 种维度组合上，三种库存感知策略都没有推荐缺货商品；算法 1 每条路径平均出现数十到数百次缺货推荐，收入只有离线上界的 \LargeAlgOneMin\%--\LargeAlgOneMax\%，而 \Greedy{} 不低于 \LargeGreedyMin\%。这再次说明问题一中库存过滤的必要性。
-\item \textbf{计算时间。} 最大配置的线性规划有 \LargeVars{} 个变量、\LargeRows{} 条约束，处于受限许可证的规模之内。\LPDual{} 的单期决策时间中位数为 \LargeTimeMedian{} 毫秒，95\% 分位数为 \LargeTimeP{} 毫秒；\LPFD{} 每期需要求解至多 $n+1=31$ 个线性规划，中位数为 \LargeTimeFD{} 毫秒。
-\item \textbf{收入。} 各配置下 \LPDual{} 相对 \Greedy{} 的平均配对收入差在离线上界的 \LargePairMin\% 与 \LargePairMax\% 之间；逐个实例检验，\LPDual{} 显著较高的有 \LargeSigWins{} 个，显著较低的有 \LargeSigLosses{} 个。这些实例的状态空间过大，无法计算 $V^{\seq}$ 来分解遗憾；从配对差看，库存机会成本带来的改进与课程实例一样较小，且在不同实例上方向不一，不能据此断言 \LPDual{} 在一般实例上优于 \Greedy{}。第\ref{sec:sens}节的灵敏度分析表明，改进的大小取决于库存的紧张程度和顾客偏好的冲突程度。
+\item \textbf{计算时间。} 最大配置有 \LargeVars{} 个变量、\LargeRows{} 条约束。逐实例计算决策耗时的中位数和 95\% 分位数，再对这组实例取均值，\LPDual{} 分别为 \LargeTimeMedian{} 和 \LargeTimeP{} 毫秒。\LPFD{} 每期至多求解 31 个线性规划，实例中位数的均值为 \LargeTimeFD{} 毫秒。
+\item \textbf{收入。} 每个实例先计算 \LPDual{} 相对 \Greedy{} 的平均配对收入差，再除以本实例的流体上界。按配置对 8 个独立实例等权平均，增幅介于 \LargePairMin\% 与 \LargePairMax\% 之间。以实例为单位计算 95\% 的 $t$ 区间，\LargeGroups{} 种配置中有 \LargeIntervalsCoverZero{} 种的区间包含零。各配置的单独区间描述本生成机制下的平均差异，这组实验不足以支持某一策略在一般实例上占优。
 \end{itemize}
-
-\input{tables/large}

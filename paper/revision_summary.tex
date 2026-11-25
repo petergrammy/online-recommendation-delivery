@@ -1,0 +1,38 @@
+\documentclass[UTF8,fontset=fandol,a4paper,11pt]{ctexart}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{amsmath,booktabs,tabularx,array}
+\usepackage[table]{xcolor}
+\definecolor{ink}{HTML}{253E4A}
+\definecolor{pale}{HTML}{EDF3F4}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\renewcommand{\arraystretch}{1.28}
+\newcommand{\topic}[1]{\par\vspace{0.5em}{\large\bfseries\color{ink}#1}\par}
+\input{generated/numbers}
+\begin{document}
+{\small 优化建模课程项目\hfill 2026 年 11 月 25 日}\par
+{\LARGE\bfseries 库存约束下的在线 Top-$K$ 推荐}\par
+{\Large 修改摘要}\par
+\vspace{0.4em}
+\textcolor{ink}{\rule{\linewidth}{0.7pt}}
+\topic{主要结果与评价口径}
+五份给定数据的流体上界都是 706。即使预知到达顺序，随机购买和逐期库存约束下的最高期望收入平均也只有 \ERSeq。主策略 LP-Dual 的平均期望收入为 \ERDual，比库存感知贪心提高 \DualGreedyAvg{}（\DualGreedyRelativePct\%）。与预知序列最优策略的差距由 \LavgGreedy{} 降至 \LavgDual{}，缩小 \DualSeqGapReductionPct\%。
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}Xrr@{}}
+\toprule
+\rowcolor{pale} 五份数据的统计口径 & 平均遗憾 & 最大遗憾 \\
+\midrule
+对每份数据的购买路径取精确条件期望 & \GavgDual & \GmaxDual \\
+各取第一次购买模拟（五条收入为 678、710、680、660、656） & \FirstMeanRegret & \FirstMaxRegret \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\topic{模型、实验与图表}
+\textbf{库存灵敏度。} 第 4 节和图 2 将库存缩放曲线修正为五段，四个断点依次为 $17/25$、$99/145$、$29/35$ 和 $21/20$。图中放大了前两个断点。在两者之间，商品 3 的期望销量上限为 17，最优库存影子价格为 $(10,8,0)$，流体值为 $680\theta+102$。同节新增两期算例，说明固定展示方案如何低估可随库存调整的在线收入。\par
+\textbf{需求与策略损失。} 限定 0.923 件商品 1 期末期望余量的适用范围；向三类顾客都展示时，该余量为 0.478 件。区分固定人数随机排列与独立同分布到达。结果显示，在所测网格上，库存收紧会增加缺货展示，收入损失则在中度紧张时最大。\par
+\textbf{结果展示。} 引言增加三问结果表，主结果并列呈现每份数据的实现收入、期末库存和期望指标。规模实验按独立序列或实例计算置信区间，较大实例的完整结果移至附录。
+\topic{代码与复核}
+已修复 LP-Count 在同一期遍历不同库存状态时重复累计顾客的问题。主策略说明现已与实现一致：首次求解某一状态时冷启动，随后读取缓存。\par
+在 conda base（Python 3.12.7、Gurobi 13.0.3）下运行的 17 项自动化测试全部通过。用独立求解器复核了 168 个库存水平，并用后向递推重算了五份主策略期望收入，最大绝对差小于 $4\times10^{-13}$。五条首次购买路径共 500 期，逐期核对了推荐、成交和库存。此次重新生成图表，扩展模拟的原始样本和计时记录沿用原实验数据。首页组员署名按要求暂留空。
+\end{document}

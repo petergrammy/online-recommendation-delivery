@@ -15,12 +15,13 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 from scipy.stats import binom, t as student_t
 
 CODE = Path(__file__).resolve().parent
 sys.path.insert(0, str(CODE))
-from recommendation import default_instance, FluidLP          # noqa: E402
-from experiments import datasets, SEED                         # noqa: E402
+from recommendation import default_instance          # noqa: E402
+from experiments import COURSE_INVENTORY_BREAKPOINTS, datasets, SEED                         # noqa: E402
 
 ROOT = CODE.parent
 RES = ROOT / 'results'
@@ -46,8 +47,20 @@ TEX = {'Alg1': r'\AlgOne', 'Greedy': r'\Greedy', 'LP-FD': r'\LPFD', 'LP-Dual': r
        'IID-DP': r'\IIDDP', 'Seq-DP': r'\SeqDP'}
 KEY = {'Alg1': 'Alg', 'Greedy': 'Greedy', 'LP-FD': 'FD', 'LP-Dual': 'Dual', 'LP-Count': 'Count', 'IID-DP': 'IID',
        'Seq-DP': 'Seq'}
+
+
+def chinese_plot_font():
+    available = {entry.name for entry in font_manager.fontManager.ttflist}
+    for family in ('Microsoft YaHei', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Source Han Sans SC',
+                   'WenQuanYi Zen Hei', 'FandolHei', 'SimHei', 'Songti SC'):
+        if family in available:
+            return family
+    raise RuntimeError('Install a Simplified Chinese font, for example Noto Sans CJK SC, to draw the figures.')
+
+
 plt.rcParams.update({
-    'font.family': ['Microsoft YaHei', 'DejaVu Sans'], 'mathtext.fontset': 'cm', 'font.size': 8.5,
+    'font.family': [chinese_plot_font(), 'DejaVu Sans'], 'mathtext.fontset': 'cm', 'font.size': 8.5,
+    'pdf.fonttype': 42,
     'axes.unicode_minus': False, 'axes.spines.top': False, 'axes.spines.right': False,
     'axes.edgecolor': AXIS, 'axes.labelcolor': INK, 'xtick.color': INK2, 'ytick.color': INK2,
     'axes.grid': True, 'grid.color': GRID, 'grid.linewidth': 0.6, 'axes.axisbelow': True,
@@ -142,6 +155,9 @@ def instance_facts():
     num('DemandOneSd', np.sqrt(pmf @ (k - 42) ** 2), '{:.2f}')
     num('DemandOneShort', pmf[k < 40].sum() * 100, '{:.1f}')
     num('DemandOneLeft', pmf @ np.maximum(40 - k, 0), '{:.3f}')
+    # All potential first choices for product 1, including those from type 3.
+    pmf_all = np.convolve(pmf, binom.pmf(np.arange(21), 20, INS.probabilities[2, 0]))
+    num('DemandOneLeftAll', pmf_all @ np.maximum(40 - np.arange(len(pmf_all)), 0))
 
 
 # ---------------------------------------------------------------------------
@@ -182,41 +198,47 @@ def q2():
     note = '顾客级模型在五份数据上的最优值与期望销量都相同，变量数与约束数按 $T=100$ 计算；流体线性规划的约束数不含变量上界。'
     write('offline', table('课程实例上三种离线模型的规模、最优值与期望销量', 'tab:offline',
                            ['模型', '变量数', '约束数', '最优值', '期望销量'], rows, 'lrrrl', note=note))
-    p = pd.read_csv(RES / 'lp_parametric.csv')
-    lp = FluidLP(INS)
-    N = np.array([50, 30, 20])
+    plot_inventory_curve(pd.read_csv(RES / 'lp_parametric.csv'))
 
-    def duals(theta):
-        return np.round(lp.solve(N, theta * INS.capacities, details=True, cold=True)['duals'], 6)
 
-    def bisect(lo, hi):
-        a = duals(lo)
-        for _ in range(50):
-            mid = (lo + hi) / 2
-            lo, hi = (mid, hi) if np.array_equal(duals(mid), a) else (lo, mid)
-        return (lo + hi) / 2
-    theta_c, theta_b, theta_a = bisect(0.60, 0.75), bisect(0.75, 0.90), bisect(0.95, 1.10)
-    lp.close()
-    num('ThetaA', theta_a, '{:.2f}')
-    num('ThetaB', theta_b, '{:.3f}')
-    num('ThetaC', theta_c, '{:.3f}')
-    fig, ax = plt.subplots(1, 2, figsize=(WIDTH, 2.3))
-    ax[0].plot(p.theta, p.F, color=INK, lw=1.6)
-    ax[0].axvline(1, color=MUTED, lw=0.8)
-    ax[0].set(xlabel=r'库存缩放系数 $\theta$', ylabel=r'$F(N,\theta C)$', xlim=(0, 1.6), ylim=(0, 780))
-    ax[0].annotate('724', (1.5, 724), xytext=(0, 4), textcoords='offset points', color=INK2, ha='center')
-    ax[0].annotate(r'$\theta=1$：706', (1, 706), xytext=(-52, -2), textcoords='offset points', color=INK2)
-    shades = [INK, INK2, MUTED]
-    dashes = ['-', '--', '-.']
-    for j in range(3):
-        ax[1].step(p.theta, p[f'beta{j + 1}'], where='post', color=shades[j], lw=1.6, ls=dashes[j])
-        ax[1].annotate(rf'$\beta_{j + 1}$', (0.3, [10, 8, 6][j]), xytext=(0, 3), textcoords='offset points',
-                       color=shades[j], fontsize=9)
-    ax[1].axvline(1, color=MUTED, lw=0.8)
-    for x in (theta_c, theta_b, theta_a):
-        ax[1].axvline(x, color=GRID, lw=0.8, zorder=0)
-    ax[1].set(xlabel=r'库存缩放系数 $\theta$', ylabel='影子价格', xlim=(0, 1.6), ylim=(-0.5, 11.5))
-    fig.tight_layout(w_pad=2)
+def plot_inventory_curve(curve):
+    edges = np.array([curve.theta.min(), *COURSE_INVENTORY_BREAKPOINTS, curve.theta.max()])
+    # At a breakpoint the solver may return either adjacent optimal price.
+    # Use open-interval solutions for the steps and their exact endpoints for the x coordinates.
+    betas = []
+    for left, right in zip(edges[:-1], edges[1:]):
+        middle = (left + right) / 2
+        row = curve.loc[(curve.theta - middle).abs().idxmin()]
+        if not left < row.theta < right:
+            raise ValueError(f'No interior LP solution for ({left}, {right}).')
+        betas.append(row[['beta1', 'beta2', 'beta3']].to_numpy(dtype=float))
+
+    fig, (value, prices, zoom) = plt.subplots(
+        1, 3, figsize=(WIDTH, 2.35), gridspec_kw={'width_ratios': [1.18, 1.12, 1]})
+    value.plot(curve.theta, curve.F, color=INK)
+    reference = curve.loc[np.isclose(curve.theta, 1)].iloc[0]
+    value.plot(1, reference.F, 'o', markersize=4, color=INK)
+    value.annotate(f'{reference.F:.0f}', (1, reference.F), xytext=(-3, -13),
+                   textcoords='offset points', ha='center')
+    value.set(xlabel=r'$\theta$', xlim=(0, 1.6), ylim=(0, 780), xticks=[0, 0.5, 1, 1.5],
+              yticks=[0, 200, 400, 600], title=r'$F(N,\theta C)$')
+
+    colors = ['#25394d', '#087d80', '#ac5531']
+    styles = ['-', '--', '-.']
+    for j, heights in enumerate(np.array(betas).T):
+        for axis in (prices, zoom):
+            axis.stairs(heights, edges, baseline=None, color=colors[j], linestyle=styles[j],
+                        linewidth=1.7, label=rf'$\beta_{j + 1}$')
+    prices.set(xlabel=r'$\theta$', title='库存影子价格', xlim=(0, 1.6), xticks=[0, 0.5, 1, 1.5],
+               ylim=(-0.6, 11.5), yticks=[0, 5, 8, 10])
+    prices.legend(loc='upper right', handlelength=1.3, borderaxespad=0.2)
+
+    lower, upper = COURSE_INVENTORY_BREAKPOINTS[:2]
+    zoom.axvspan(lower, upper, color='#e2eeef', zorder=0)
+    zoom.set(xlabel=r'$\theta$', title='断点附近放大', xlim=(0.6785, 0.6845),
+             xticks=[lower, upper], xticklabels=['0.6800', '0.6828'],
+             ylim=(-0.6, 11.5), yticks=[0, 5, 8, 10])
+    fig.tight_layout(w_pad=0.8)
     save_fig(fig, 'lp_parametric')
 
 
@@ -289,6 +311,8 @@ def main_results():
     num('DualGreedyMin', diff.min())
     num('DualGreedyMax', diff.max())
     num('DualGreedyAvg', diff.mean())
+    num('DualGreedyRelativePct', 100 * diff.mean() / m.ER_Greedy.mean(), '{:.2f}')
+    num('DualSeqGapReductionPct', 100 * diff.mean() / m.L_Greedy.mean(), '{:.1f}')
     diff = m['ER_LP-Dual'] - m['ER_LP-FD']
     num('DualFDAvg', diff.mean())
     num('DualFDWins', int((diff > 0).sum()), '{:d}')
@@ -296,25 +320,37 @@ def main_results():
     num('PnegDual', 100 * m['Pneg_LP-Dual'].mean(), '{:.1f}')
     num('PnegDualMin', 100 * m['Pneg_LP-Dual'].min(), '{:.1f}')
     num('PnegDualMax', 100 * m['Pneg_LP-Dual'].max(), '{:.1f}')
-    # ---- table: LP-Dual per dataset
-    rows = []
-    for s in DS:
-        r = d.loc[s]
-        mc = sim[(sim.dataset == s) & (sim.policy == 'LP-Dual')].iloc[0] if sim is not None else None
-        rows.append([s[1], f3(r['ER_LP-Dual']), f3(r['G_LP-Dual']), f3(r['L_LP-Dual']),
-                     f3(mc.mean_revenue) if mc is not None else '--', f3(mc.hw95) if mc is not None else '--',
-                     f3(r['Ec1_LP-Dual']), f3(r['Ec2_LP-Dual']), f3(r['Ec3_LP-Dual']), pct(r['Pso1_LP-Dual'])])
-    rows.append(r'\midrule')
-    avg_mc = sim[(sim.policy == 'LP-Dual')].mean_revenue.mean() if sim is not None else None
-    rows.append(['平均', f3(m['ER_LP-Dual'].mean()), f3(m['G_LP-Dual'].mean()), f3(m['L_LP-Dual'].mean()),
-                 f3(avg_mc) if avg_mc is not None else '--', '', f3(m['Ec1_LP-Dual'].mean()), f3(m['Ec2_LP-Dual'].mean()),
-                 f3(m['Ec3_LP-Dual'].mean()), pct(m['Pso1_LP-Dual'].mean())])
-    header = ['$s$', r'$\E R_T$', '$G_s$', '$L_s$', r'$\overline R_s$', '$h_s$', r'$\E c_{T+1,1}$', r'$\E c_{T+1,2}$',
-              r'$\E c_{T+1,3}$', '$q_1$']
-    note = (r'$\E R_T$、$G_s$、$L_s$、$\E c_{T+1,j}$ 与 $q_1=\Pr(c_{T+1,1}=0)$ 为精确值；$\overline R_s$ 与 $h_s$ 来自 $B=2000$ '
-            r'次蒙特卡洛重复，定义见式\eqref{eq:mcstats}。五份数据的 $F_s$ 均为 706。')
-    write('main', table(r'主策略 \LPDual{} 在五份数据上的收入、遗憾与期末库存', 'tab:main', header, rows,
-                        'c' + 'r' * 9, note=note))
+    # Put each dataset in a column so realized and expected regret can be compared directly.
+    rows = [r'\multicolumn{7}{l}{\textit{固定到达序列，对购买结果取期望}} \\']
+    for label, field in [(r'期望收入 $\E R_T$', 'ER'), (r'期望遗憾 $G_s$', 'G'),
+                         (r'策略损失 $L_s$', 'L'), (r'商品 1 期末库存', 'Ec1'),
+                         (r'商品 2 期末库存', 'Ec2'), (r'商品 3 期末库存', 'Ec3')]:
+        values = m[f'{field}_LP-Dual']
+        rows.append([label, *[f3(x) for x in values], f3(values.mean())])
+    sold_out = m['Pso1_LP-Dual']
+    rows.append([r'商品 1 售罄概率', *[pct(x) for x in sold_out], pct(sold_out.mean())])
+    if sim is not None:
+        estimates = sim[sim.policy == 'LP-Dual'].set_index('dataset').loc[DS]
+        rows.append(r'\midrule')
+        rows.append([r'模拟均值 $\overline R_s$', *[f3(x) for x in estimates.mean_revenue],
+                     f3(estimates.mean_revenue.mean())])
+        rows.append([r'95\% 区间半宽 $h_s$', *[f3(x) for x in estimates.hw95], '--'])
+    replications = pd.read_csv(RES / 'sim_replications.csv')
+    first = replications[(replications.policy == 'LP-Dual') & (replications.rep == 0)].set_index('dataset').loc[DS]
+    sample_gap = m.F - first.revenue
+    num('FirstMeanRegret', sample_gap.mean(), '{:.1f}')
+    num('FirstMaxRegret', sample_gap.max(), '{:.0f}')
+    num('FirstOosSlots', first.oos_slots.sum(), '{:.0f}')
+    rows.extend([r'\midrule', r'\multicolumn{7}{l}{\textit{每份数据的首次购买模拟}} \\'])
+    rows.append([r'实现收入 $R_T^{(1)}$', *[f'{x:.0f}' for x in first.revenue], f'{first.revenue.mean():.1f}'])
+    rows.append([r'实现遗憾 $F_s-R_T^{(1)}$', *[f'{x:.0f}' for x in sample_gap], f'{sample_gap.mean():.1f}'])
+    inventory = [f'$({c1},{c2},{c3})$' for c1, c2, c3 in first[['c1', 'c2', 'c3']].itertuples(index=False, name=None)]
+    rows.append(['期末库存', *inventory, '--'])
+    header = ['指标', *DS, '五组均值']
+    note = (r'五份数据的 $F_s$ 均为 706。期望值和售罄概率由精确递推得到。每份数据的首次模拟均使用预设随机流的首组购买抽样，'
+            r'五条路径共出现 \FirstOosSlots{} 次缺货推荐。期望遗憾的最大值为 \GmaxDual，首次模拟的最大实现遗憾为 \FirstMaxRegret。')
+    write('main', table(r'\LPDual{} 在五份数据上的期望结果与首次模拟', 'tab:main', header, rows,
+                        'lrrrrrr', note=note, size=r'\small'))
     # ---- table: aggregate over policies
     rows = []
     for p in pols:
@@ -324,7 +360,7 @@ def main_results():
         rows.append([TEX[p] + '{}', f3(m[f'ER_{p}'].mean()), f3(m[f'G_{p}'].mean()), f3(m[f'G_{p}'].max()), g_mc,
                      f3(m[f'L_{p}'].mean()), f'{w:.2f}' if p != 'Seq-DP' else '--'])
     header = ['策略', r'$\overline{\E R_T}$', r'$\overline G$', r'$G_{\max}$', r'$\overline G^{\,\mathrm{MC}}$',
-              r'$\overline L$', r'$\overline W$']
+              r'$\overline{L}$', r'$\overline W$']
     note = (r'$\overline G$ 与 $G_{\max}$ 按式\eqref{eq:avgmax}由精确期望计算；$\overline G^{\,\mathrm{MC}}=\frac15\sum_s(F_s-\overline R_s)$ '
             r'为模拟估计；$\overline L$ 为五份数据上策略损失 $L_s$ 的平均；$\overline W$ 为每条路径上缺货推荐的期望次数，定义见式\eqref{eq:waste}。'
             r'\LPCount{} 使用了总人数 $N$；\SeqDP{} 预知顾客类型序列，只作为基准。')
@@ -379,12 +415,15 @@ def main_results():
     # ---- Monte-Carlo consistency
     if sim is not None:
         z = []
-        for p in ['Alg1', 'Greedy', 'LP-FD', 'LP-Dual', 'IID-DP']:
+        coverage = []
+        for p in ['Alg1', 'Greedy', 'LP-FD', 'LP-Dual', 'LP-Count', 'IID-DP']:
             for s in DS:
                 r = sim[(sim.dataset == s) & (sim.policy == p)].iloc[0]
-                z.append(abs(r.mean_revenue - d.loc[s, f'ER_{p}']) / (r.sd_revenue / np.sqrt(r.B)))
+                error = abs(r.mean_revenue - d.loc[s, f'ER_{p}'])
+                z.append(error / (r.sd_revenue / np.sqrt(r.B)))
+                coverage.append(error <= r.hw95)
         num('MCmaxZ', max(z), '{:.2f}')
-        num('MCinside', int(np.sum(np.array(z) <= student_t.ppf(.975, 1999))), '{:d}')
+        num('MCinside', sum(coverage), '{:d}')
         num('MCtotal', len(z), '{:d}')
         num('MChw', sim[sim.policy == 'LP-Dual'].hw95.mean(), '{:.2f}')
         pair = pd.read_csv(RES / 'sim_paired.csv')
@@ -424,7 +463,7 @@ def loss_analysis():
         return out
     base = block('base', DS)
     rows = [[TEX[p] + '{}'] + [f3(base[p][k]) for k in ['total', 'sell', 'hold', 'other', 'w1', 'w2', 'w3']] for p in pols]
-    header = ['策略', r'$\overline L$', r'$\overline L^{\mathrm{sell}}$', r'$\overline L^{\mathrm{hold}}$', r'$\overline L^{\mathrm{oth}}$',
+    header = ['策略', r'$\overline{L}$', r'$\overline L^{\mathrm{sell}}$', r'$\overline L^{\mathrm{hold}}$', r'$\overline L^{\mathrm{oth}}$',
               r'$\overline L_{[1,60]}$', r'$\overline L_{[61,90]}$', r'$\overline L_{[91,100]}$']
     write('loss', table('策略损失按决策类型与时段的分解（五份数据平均）', 'tab:loss', header, rows, 'l' + 'r' * 7))
     for p in pols:
@@ -624,7 +663,7 @@ def sensitivity():
     header = [r'$\theta$', '$C$', '$F$', r'$\overline{V^{\seq}}$'] + [r'$\overline L^{' + TEX[p] + '}$' for p in pols] + [r'$\overline W^{\AlgOne}$']
     write('theta', table(r'库存缩放 $C\to\lfloor\theta C\rceil$ 下的策略损失（五份数据平均）', 'tab:theta', header, rows,
                          'cc' + 'r' * 8, size=r'\footnotesize'))
-    for theta, key in [(0.5, 'Half'), (0.6, 'Six'), (0.7, 'Seven'), (0.8, 'Eight'), (1.0, 'One'), (1.2, 'Twelve')]:
+    for theta, key in [(0.3, 'Three'), (0.5, 'Half'), (0.6, 'Six'), (0.7, 'Seven'), (0.8, 'Eight'), (1.0, 'One'), (1.2, 'Twelve')]:
         for p in pols:
             num(f'Theta{key}L{KEY[p]}', agg[theta][p])
         num(f'Theta{key}W', agg[theta]['W'], '{:.2f}')
@@ -632,17 +671,22 @@ def sensitivity():
     num('ThetaWorstDual', worst, '{:.1f}')
     num('ThetaWorstDualL', agg[worst]['LP-Dual'])
     thetas = sorted(agg)
-    fig, ax = plt.subplots(1, 2, figsize=(WIDTH, 2.35), gridspec_kw={'width_ratios': [1.6, 1]})
+    fig, ax = plt.subplots(1, 3, figsize=(WIDTH, 2.65), gridspec_kw={'width_ratios': [1.4, 1, 1]},
+                           sharex=True)
     for p in ['Greedy', 'LP-FD', 'LP-Dual', 'IID-DP']:
-        y = [agg[th][p] for th in thetas]
-        ax[0].plot(thetas, y, color=COLOR[p], ls=STYLE[p], marker=MARKER[p], ms=4)
-    ax[0].axvline(1, color=AXIS, lw=0.8)
-    ax[0].legend(handles=legend_handles(['Greedy', 'LP-FD', 'LP-Dual', 'IID-DP']), loc='upper right', fontsize=7.2)
-    ax[0].set(xlabel=r'库存缩放系数 $\theta$', ylabel=r'平均策略损失 $\overline{L}$', ylim=(-0.2, None))
-    ax[1].plot(thetas, [agg[th]['Alg1'] for th in thetas], color=COLOR['Alg1'], marker=MARKER['Alg1'], ms=4)
-    ax[1].set(xlabel=r'库存缩放系数 $\theta$', ylabel=r'算法 1 的平均策略损失')
-    ax[1].axvline(1, color=AXIS, lw=0.8)
-    fig.tight_layout(w_pad=2)
+        ax[0].plot(thetas, [agg[th][p] for th in thetas], color=COLOR[p], ls=STYLE[p], marker=MARKER[p], ms=3)
+    ax[0].set_title('库存感知策略', fontsize=9)
+    ax[0].legend(handles=legend_handles(['Greedy', 'LP-FD', 'LP-Dual', 'IID-DP']), fontsize=6.5)
+    ax[0].set_ylabel(r'平均策略损失 $\overline{L}$')
+    ax[1].plot(thetas, [agg[th]['Alg1'] for th in thetas], color=COLOR['Alg1'], marker=MARKER['Alg1'], ms=3)
+    ax[1].set(title='算法 1', ylabel=r'平均策略损失 $\overline{L}$')
+    ax[2].plot(thetas, [agg[th]['W'] for th in thetas], color=INK2, ls='--', marker='o', ms=3)
+    ax[2].set(title='算法 1', ylabel='平均缺货推荐次数')
+    for panel in ax:
+        panel.title.set_fontsize(9)
+        panel.set(xlabel=r'库存系数 $\theta$', xticks=[.3, .6, .9, 1.2], ylim=(0, None))
+        panel.axvline(1, color=AXIS, lw=0.8)
+    fig.tight_layout(w_pad=.8)
     save_fig(fig, 'theta')
     # K
     k = pd.read_csv(RES / 'sensitivity_K.csv')
@@ -658,6 +702,11 @@ def sensitivity():
     write('K', table('推荐位数 $K$ 对期望收入的影响（五份数据平均）', 'tab:K', header, rows, 'c' + 'r' * 7, size=r'\small'))
 
 
+def group_mean_half_width(observations):
+    """Student-t 95% half-width across independent sequences or instances."""
+    return student_t.ppf(.975, len(observations) - 1) * observations.sem()
+
+
 def scaling():
     path = RES / 'scaling.csv'
     if not path.exists():
@@ -667,15 +716,11 @@ def scaling():
         return
     rows, info = [], {}
     for T, sub in d.groupby('T'):
-        reps = int(sub.reps.iloc[0])
-        k = len(sub)
-
-        def hw(col):
-            """1.96 x pooled standard error of a mean over k sequences x reps replications."""
-            return 1.96 * np.sqrt((sub[col] ** 2 / reps).sum()) / k
         G = {p: (sub.F - sub[f'mean_{p}']).mean() for p in ['Greedy', 'LP-FD', 'LP-Dual']}
-        diff = sub['diff_LP-Dual_Greedy'].mean()
-        h_diff, h_dual = hw('diffsd_LP-Dual_Greedy'), hw('sd_LP-Dual')
+        paired_by_sequence = sub['diff_LP-Dual_Greedy']
+        diff = paired_by_sequence.mean()
+        h_diff = group_mean_half_width(paired_by_sequence)
+        h_dual = group_mean_half_width(sub.F - sub['mean_LP-Dual'])
         gap = (sub.F - sub.V_seq).mean() if 'V_seq' in sub and sub.V_seq.notna().all() else np.nan
         C = np.floor(T / 100 * INS.capacities + 0.5).astype(int)
         info[T] = (G['LP-Dual'], h_dual, diff, h_diff)
@@ -685,11 +730,10 @@ def scaling():
                      pct(sub['mean_LP-Dual'].mean() / sub.F.mean(), 2)])
     header = ['$T$', '$C$', '$F$', r'$\widehat G^{\Greedy}$', r'$\widehat G^{\LPFD}$', r'$\widehat G^{\LPDual}\pm h$',
               r'$\bar d^{\,\LPDual,\Greedy}\pm h$', r'$\overline{F-V^{\seq}}$', r'$\overline R^{\LPDual}/F$']
-    paths = {int(T): int(sub.reps.iloc[0]) * len(sub) for T, sub in d.groupby('T')}
-    counts = '、'.join(f'{v}' for v in sorted(set(paths.values()), reverse=True))
-    note = (r'每个 $T$ 生成 10 条人数为 $T\lambda$ 的随机排列，各策略使用公共随机数，路径总数依 $T$ 由小到大为 ' + counts +
-            r'；$\widehat G=F-\overline R$ 为模拟估计，$h$ 为合并 10 条序列后的 95\% 置信半宽。'
-            r'$T>200$ 时动态规划的状态数过大，未计算 $V^{\seq}$。')
+    note = (r'各 $T$ 独立生成 10 条固定人数的随机排列，人数按 $T\lambda$ 取整后使总和等于 $T$。'
+            r'每条序列模拟 300 次购买（$T=800$ 时 150 次，$T=1600$ 时 100 次），策略共享购买抽样。'
+            r'$\widehat G=F-\overline R$。以每条序列的模拟均值或配对差均值为一个观测，$h$ 是 10 条独立序列间的 95\% $t$ 区间半宽。'
+            r'$T>200$ 时未计算 $V^{\seq}$。')
     write('scaling', table(r'销售期与库存同比例放大时的遗憾', 'tab:scaling', header, rows, 'rcrrrrrrr', note=note,
                            size=r'\footnotesize'))
     Tmax = int(d['T'].max())
@@ -717,23 +761,24 @@ def large():
         r = {p: (sub[f'mean_{p}'] / sub.F).mean() for p in ['Alg1', 'Greedy', 'LP-FD', 'LP-Dual']}
         row = [f'$({m},{n},{T},{K})$', f'{rho:.1f}'] + [f'{100 * r[p]:.1f}' for p in ['Alg1', 'Greedy', 'LP-FD', 'LP-Dual']]
         if paired:
-            reps = sub.reps.to_numpy()
-            rel = (sub['diff_LP-Dual_Greedy'] / sub.F).mean()
-            hw = 1.96 * np.sqrt(((sub['diffsd_LP-Dual_Greedy'] / sub.F) ** 2 / reps).sum()) / len(sub)
+            paired_by_instance = sub['diff_LP-Dual_Greedy'] / sub.F
+            rel = paired_by_instance.mean()
+            hw = group_mean_half_width(paired_by_instance)
             row.append('$' + no_negative_zero(f'{100 * rel:.2f}') + r'\pm' + f'{100 * hw:.2f}$')
         row += [f"{sub['oos_Alg1'].mean():.0f}", f"{sub['median_ms_LP-Dual'].mean():.2f}", f"{sub['p95_ms_LP-Dual'].mean():.2f}",
                 f"{sub['median_ms_LP-FD'].mean():.2f}"]
         rows.append(row)
     header = ['$(m,n,T,K)$', r'$\rho$', r'\AlgOne', r'\Greedy', r'\LPFD', r'\LPDual']
-    header += [r'$\bar d/F\pm h$'] if paired else []
+    header += [r'$\bar\delta\pm h$'] if paired else []
     header += [r'$\overline W^{\AlgOne}$', r'$t^{\LPDual}_{50}$', r'$t^{\LPDual}_{95}$', r'$t^{\LPFD}_{50}$']
     k = 7 if paired else 6
     pre = [r' & & \multicolumn{4}{c}{$\overline R/F$ (\%)} & ' + (r'(\%) ' if paired else '') + r'& & \multicolumn{3}{c}{单期决策时间/ms} \\',
            r'\cmidrule(lr){3-6}' + f'\\cmidrule(lr){{{k + 2}-{k + 4}}}']
-    note = (r'每种配置随机生成 8 个实例，每个实例 ' + f'{int(d.reps.max()) if "reps" in d else 40}' +
-            r' 次购买重复（$m=20$ 时减半），各策略使用公共随机数。$\rho$ 为库存相对于算法 1 期望需求的比例；'
-            r'$\bar d/F$ 为 \LPDual{} 减 \Greedy{} 的配对收入差占 $F$ 的百分比，$h$ 为 95\% 置信半宽；'
-            r'$\overline W$ 为每条路径上缺货推荐的平均次数；$t_{50}$、$t_{95}$ 为单期决策时间的中位数与 95\% 分位数，包含线性规划求解与排序。')
+    note = (r'各配置独立抽取 8 个实例，每例模拟 ' + f'{int(d.reps.max())}' +
+            r' 次购买（$m=20$ 时减半），策略共享购买抽样。$\rho$ 是相对算法 1 期望需求的库存比例。'
+            r'对每个实例，$\delta$ 是 \LPDual{} 相对 \Greedy{} 的配对收入差均值除以该例的 $F$。'
+            r'$\bar\delta$ 和 $h$ 均以百分数列出，$h$ 为 8 个实例间的 95\% $t$ 区间半宽。'
+            r'$\overline W$ 是平均每条路径的缺货推荐次数。计时列分别取各实例决策耗时的中位数或 95\% 分位数，再对实例取均值。')
     write('large', table('随机生成的较大实例', 'tab:large', header, rows, 'lr' + 'r' * (len(header) - 2), note=note, pre=pre,
                          size=r'\footnotesize'))
     big = d[d.m == d.m.max()]
@@ -747,11 +792,13 @@ def large():
     num('LargeGreedyMin', 100 * (d.mean_Greedy / d.F).groupby([d.m, d.rho]).mean().min(), '{:.1f}')
     if paired:
         rel = d['diff_LP-Dual_Greedy'] / d.F
-        se = d['diffsd_LP-Dual_Greedy'] / d.F / np.sqrt(d.reps)
-        num('LargePairMin', 100 * rel.groupby([d.m, d.rho]).mean().min(), '{:.2f}')
-        num('LargePairMax', 100 * rel.groupby([d.m, d.rho]).mean().max(), '{:.2f}')
-        num('LargeSigWins', int((rel > 1.96 * se).sum()), '{:d}')
-        num('LargeSigLosses', int((rel < -1.96 * se).sum()), '{:d}')
+        by_configuration = rel.groupby([d.m, d.n, d['T'], d.K, d.rho])
+        mean = by_configuration.mean()
+        half_width = by_configuration.apply(group_mean_half_width)
+        num('LargePairMin', 100 * mean.min(), '{:.2f}')
+        num('LargePairMax', 100 * mean.max(), '{:.2f}')
+        num('LargeGroups', len(mean), '{:d}')
+        num('LargeIntervalsCoverZero', int((mean.abs() <= half_width).sum()), '{:d}')
         num('LargeInstances', len(d), '{:d}')
 
 

@@ -1,5 +1,5 @@
 \section{程序结构与运行}\label{app:code}
-全部代码位于 \texttt{code} 目录，依赖 Python 3.11、\texttt{gurobipy}、NumPy、pandas、SciPy 与 Matplotlib。线性规划均为连续模型，最大规模的扩展实验含 600 个变量，处于 Gurobi 受限许可证的规模范围之内。
+全部代码位于 \texttt{code} 目录。原实验使用 Python 3.11，修订时在 Python 3.12 和 Gurobi 13.0.3 环境复核；依赖见 \texttt{requirements.txt}。在线算法求解连续线性规划，最大规模的扩展实验含 600 个变量。第\ref{sec:q2}节另以两个离线整数模型作对照。
 \begin{itemize}
 \item \texttt{recommendation.py}：实例定义 \texttt{Instance}、可复用的流体线性规划 \texttt{FluidLP}、四种在线策略（\texttt{FixedTopK} 即算法 1、\texttt{Greedy}、\texttt{LPLookahead}、\texttt{LPDual}）、公共随机数模拟器 \texttt{simulate}、动态规划 \texttt{dp\_benchmark}，以及精确评价所需的 \texttt{exact\_forward} 与 \texttt{LPTables}。
 \item \texttt{run\_policy.py}：对任意到达序列 CSV（列 \texttt{t}, \texttt{i\_t}）运行指定策略，输出逐期推荐、购买、库存轨迹，以及总收入、剩余库存、hindsight 与遗憾；可通过 JSON 文件指定任意 $m,n,T,K$ 的实例。
@@ -19,20 +19,19 @@ python make_assets.py
 在线服务中，平台创建一次策略对象，每期调用 \texttt{recommend(i, c, H)} 得到推荐集合，其中 \texttt{i} 为顾客类型（从 0 开始编号），\texttt{c} 为当前库存，\texttt{H} 为含本期在内的剩余期数；观察到购买结果后由平台更新库存。
 
 \section{自动化测试}\label{app:tests}
-\texttt{tests.py} 共 14 项测试，覆盖模型、策略与评价方法三个层面：
-\begin{enumerate}[label=(\arabic*)]
-\item 课程实例的流体线性规划最优值为 706，期望销量为 $(40,29,37/3)$，库存对偶为 $(9,0,0)$，对偶目标\eqref{eq:dual}等于原始目标；
-\item 以商品为变量的模型\eqref{eq:lp}与以推荐集合为变量的模型最优值相同；
-\item 动态规划\eqref{eq:seqdp}与独立编写的递归枚举结果一致；
-\item 前向精确评价\eqref{eq:forward}与后向递推对 \Greedy{}、\IIDDP{}、\SeqDP{} 给出相同的期望收入；
-\item 动作表版本的 \LPFD{}、\LPDual{} 与在线策略对象逐状态枚举的期望收入一致；
-\item 剩余人数预测版本的动作表与在线模拟结果一致；
-\item 向量化排序规则与逐个排序在 3000 组随机输入上完全一致；
-\item 随机生成的不同 $(m,n,T,K)$ 实例上，策略不推荐缺货商品、收入恒等式\eqref{eq:revenue}成立，并且改变未来到达不影响此前的决策；
-\item 算法 1 的缺货推荐次数的模拟均值与精确值一致；
-\item 潜在首选的抽样频率与 $p_{ij}$ 一致；
-\item 机会成本等于价格时，策略仍把即时收益为正的商品放进推荐列表；
-\item $K\ge n$ 时，策略在每条路径上达到命题\ref{prop:kn}给出的最优销量；
-\item 非法输入（概率行和大于 1、非整数库存、到达率之和不为 1）被拒绝；
-\item 算例\ref{ex:q1}的闭式收入与精确评价结果一致。
-\end{enumerate}
+在 conda base 的 Python 3.12.7 与 Gurobi 13.0.3 环境中执行 \texttt{python tests.py}，17 项测试全部通过。下表列出各组的验收内容。
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}l r X@{}}
+\toprule
+测试组 & 项数 & 核对内容 \\
+\midrule
+流体模型 & 4 & 课程实例的目标值 706、销量和原始对偶相等；商品与推荐集合两种 LP 等价；五段库存价格及四个断点；两期反例的固定方案、在线最优和流体值分别为 0.6、0.84、1。\\
+动态规划 & 2 & 递归枚举与 Bellman 方程相符，前向传播与后向递推对贪心、独立到达策略和预知序列策略给出相同收入。\\
+策略与模拟 & 10 & 在线推荐与动作表、向量化与逐项排序、剩余人数预测与购买模拟相互核对。涵盖单期只累计一次到达、不同维度的可行性和前缀因果性、缺货展示、购买概率、零分并列、全商品展示与非法输入。\\
+反例 & 1 & 题一中固定推荐和可行策略的闭式期望收入与精确计算一致。\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+剩余人数预测的回归例含 18 期、三类顾客人数 $(8,5,5)$。逐状态枚举在每期只登记一次当期顾客，期末计数恢复为 $(8,5,5)$，对偶策略的期望收入为 110.618000，与独立构造的动作表一致。

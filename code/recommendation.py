@@ -14,8 +14,8 @@ Instance        problem data r, P, C, lambda, K (validated)
 FluidLP         reusable continuous LP  F(N, c)  solved with gurobipy
 Policies        FixedTopK  (Algorithm 1 of the assignment, ignores inventory)
                 Greedy     (stock-aware, ranks p_ij r_j)
-                LPLookahead (main policy, finite differences of F)
-                LPDual     (variant, LP dual prices of the inventory rows)
+                LPDual     (main policy, LP dual prices of the inventory rows)
+                LPLookahead (comparison policy, finite differences of F)
 simulate        Monte-Carlo run with common random numbers
 dp_benchmark    exact stochastic DP (IID arrivals or a known type sequence)
 exact_forward   exact distribution of the inventory path for table policies
@@ -269,7 +269,7 @@ def count_forecast(totals, seen, tau, rates):
 
 
 class LPLookahead:
-    """Main policy: one-step lookahead with the fluid LP as continuation value.
+    """LP-FD: one-step lookahead with the fluid LP as continuation value.
 
     forecast='rate'  : future type counts h * lambda (uses only lambda and T).
     forecast='count' : future type counts N - (types already observed), for
@@ -327,10 +327,19 @@ class LPLookahead:
                 delta[j] = base - self.fluid_value(d, d_key, tau, less)
         return delta
 
-    def recommend(self, customer, inventory, remaining):
-        self.calls += 1
+    def observe_arrival(self, customer):
+        """Advance the observed prefix once for this period."""
         if self.forecast == 'count':
             self.seen[customer] += 1
+
+    def recommend(self, customer, inventory, remaining):
+        """Online entry point: observe one customer, then choose their offer."""
+        self.observe_arrival(customer)
+        return self.recommend_after_arrival(customer, inventory, remaining)
+
+    def recommend_after_arrival(self, customer, inventory, remaining):
+        """Choose an offer at this inventory with the current prefix held fixed."""
+        self.calls += 1
         tau = remaining - 1                           # customers after the current one
         d, d_key = self.demand(tau)
         key = (customer, d_key) + tuple(int(v) for v in inventory)
@@ -350,7 +359,7 @@ class LPLookahead:
 
 
 class LPDual(LPLookahead):
-    """Variant: opportunity cost = dual price beta_j of the inventory row of F(d, c).
+    """Main policy: use the dual price of each inventory constraint as its opportunity cost.
 
     One LP per decision (instead of n + 1). The LP is cold-started so that the
     dual vector is a deterministic function of the state at degenerate points.
@@ -525,15 +534,24 @@ def exact_table_policy_value(instance, arrivals, table=None):
 
 
 def exact_policy_value(instance, arrivals, policy):
-    """Forward propagation over reachable states calling policy.recommend (slow, for tests)."""
+    """Evaluate an inventory policy on a fixed sequence of customer types.
+
+    Policies with arrival memory expose observe_arrival and recommend_after_arrival:
+    all inventory states in a period must share the same observed prefix. For
+    policies without arrival memory, recommend depends only on the state supplied.
+    """
     if hasattr(policy, 'reset'):
         policy.reset()
+    observe = getattr(policy, 'observe_arrival', None)
+    recommend = policy.recommend if observe is None else policy.recommend_after_arrival
     distribution = {tuple(instance.capacities): 1.0}
     total = 0.0
     for t, i in enumerate(arrivals):
+        if observe is not None:
+            observe(int(i))
         nxt = {}
         for c, mass in distribution.items():
-            s = policy.recommend(int(i), np.asarray(c), len(arrivals) - t)
+            s = recommend(int(i), np.asarray(c), len(arrivals) - t)
             p0 = 1.0
             for j in s:
                 if c[j] <= 0:
@@ -762,7 +780,7 @@ class LPTables:
 
 
 def count_lp_offer(instance, arrivals, totals, lattice=None, workers=None, duals=False):
-    """Exact-evaluation offers of LP-FD with the remaining-count forecast on one sequence."""
+    """Exact offers with known type totals, using dual prices or finite differences."""
     L = lattice or Lattice(instance)
     T = len(arrivals)
     seen = np.zeros(instance.m)

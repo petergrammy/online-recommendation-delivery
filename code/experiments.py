@@ -437,6 +437,32 @@ def run_q1():
 # ---------------------------------------------------------------------------
 # 4) Question 2: offline formulations, LP solution and parametric analysis
 # ---------------------------------------------------------------------------
+# Intersections of the five dual objectives derived in the report for the course instance.
+COURSE_INVENTORY_BREAKPOINTS = (17 / 25, 99 / 145, 29 / 35, 21 / 20)
+
+
+def course_inventory_curve(lp, counts, capacities):
+    """Solve the LP at the grid, exact breakpoints, and an interior point of every regime."""
+    edges = np.array([0, *COURSE_INVENTORY_BREAKPOINTS, 1.6])
+    midpoints = (edges[:-1] + edges[1:]) / 2
+    grid = np.arange(161) / 100
+    # 0.681 is the narrow-regime example in the report; the 0.01 grid skips its interior.
+    scales = np.unique(np.r_[grid, edges, midpoints, 0.681])
+    records = []
+    for theta in scales:
+        sol = lp.solve(counts, theta * capacities, details=True, cold=True)
+        record = {'theta': theta, 'F': sol['value']}
+        for j, price in enumerate(sol['duals'], start=1):
+            record[f'beta{j}'] = price
+        for j, sales in enumerate(sol['sales'], start=1):
+            record[f'sales{j}'] = sales
+        for i, row in enumerate(sol['y'], start=1):
+            for j, exposures in enumerate(row, start=1):
+                record[f'y{i}{j}'] = exposures
+        records.append(record)
+    return pd.DataFrame(records)
+
+
 def run_offline():
     ins = default_instance()
     P, r, C = ins.probabilities, ins.prices, ins.capacities
@@ -481,13 +507,11 @@ def run_offline():
     sol = lp.solve(N, C, details=True)
     (RES / 'lp_solution.json').write_text(json.dumps({k: np.asarray(v).tolist() if not np.isscalar(v) else v
                                                       for k, v in sol.items()}, indent=2), encoding='utf-8')
-    par = []
-    for theta in np.round(np.arange(0.05, 1.6001, 0.01), 2):
-        res = lp.solve(N, theta * C, details=True)
-        par.append({'theta': theta, 'F': res['value'], **{f'beta{j + 1}': res['duals'][j] for j in range(3)},
-                    **{f'sales{j + 1}': res['sales'][j] for j in range(3)}})
-    lp.close()
-    save(pd.DataFrame(par), 'lp_parametric.csv')
+    try:
+        curve = course_inventory_curve(lp, N, C)
+    finally:
+        lp.close()
+    save(curve, 'lp_parametric.csv')
 
 
 # ---------------------------------------------------------------------------
